@@ -1,0 +1,81 @@
+{
+    "project": {
+      "gcs_bucket": "cs224n-context-weight-storage"
+    },
+  
+    "splits": {
+      "Ns": [16, 32, 64, 128, 256],
+      "seeds": [0, 1, 2],
+      "nested": true,
+      "stratify": true,
+      "label_key": "label"
+    },
+  
+    "datasets": [
+  
+      {
+        "name": "financial_phrasebank",
+        "adapter": "financial_phrasebank",
+        "hf_id": "financial_phrasebank",
+        "hf_config": "sentences_allagree",
+        "hf_split": "train",
+        "trust_remote_code": true,
+        "text_key": "sentence",
+        "label_map": {
+          "0": "negative",
+          "1": "neutral",
+          "2": "positive"
+        }
+      },
+  
+      {
+        "name": "superglue_rte",
+        "adapter": "superglue_rte",
+        "hf_id": "super_glue",
+        "hf_config": "rte",
+        "hf_split": "train",
+        "trust_remote_code": false,
+        "text_key": "premise",
+        "text_key_2": "hypothesis",
+        "label_map": {
+          "0": "entailment",
+          "1": "not_entailment"
+        }
+      },
+  
+      {
+        "name": "gsm8k",
+        "adapter": "gsm8k",
+        "hf_id": "gsm8k",
+        "hf_config": "main",
+        "hf_split": "train",
+        "trust_remote_code": false,
+        "text_key": "question",
+        "label_key": "answer"
+      },
+  
+      {
+        "name": "raft",
+        "adapter": "raft",
+        "hf_id": "raft",
+        "hf_config": null,
+        "hf_split": "train",
+        "trust_remote_code": false,
+        "group_key": "task_name",
+        "round_robin_sampling": true
+      },
+  
+      {
+        "name": "ifbench",
+        "adapter": "ifbench",
+        "hf_id": "ifbench",
+        "hf_config": null,
+        "hf_split": "train",
+        "trust_remote_code": false,
+        "text_key": "instruction",
+        "label_key": "response"
+      }
+  
+    ]
+  }
+  
