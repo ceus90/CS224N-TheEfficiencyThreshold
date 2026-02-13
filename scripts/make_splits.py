@@ -23,14 +23,13 @@ import argparse
 import datetime as dt
 import importlib
 import json
-import os
+import random
+from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
-
+from typing import Any, Dict, List, Optional, Sequence
 from google.cloud import storage
 
 from src.splits import make_splits, indices_to_examples
-
 
 # -----------------------------
 # Small utilities
@@ -89,25 +88,6 @@ def _gcs_upload_file(
         return
 
     blob.upload_from_filename(str(local_path))
-
-
-def _gcs_upload_text(
-    client: storage.Client,
-    bucket_name: str,
-    gcs_blob_name: str,
-    text: str,
-    overwrite: bool,
-    content_type: str = "application/json",
-) -> None:
-    """Upload text content to GCS."""
-    bucket = client.bucket(bucket_name)
-    blob = bucket.blob(gcs_blob_name)
-
-    # Skip if exists and overwrite disabled
-    if not overwrite and blob.exists(client):
-        return
-
-    blob.upload_from_string(text, content_type=content_type)
 
 
 def _import_adapter(adapter_name: str):
@@ -192,6 +172,7 @@ def _build_manifest(
     splits_cfg: Dict[str, Any],
     num_examples: int,
     label_counts: Optional[Dict[str, int]],
+    group_stats: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     """Create a manifest.json payload for a dataset's splits."""
     return {
@@ -209,6 +190,7 @@ def _build_manifest(
                 "label_key": dataset_cfg.get("label_key", splits_cfg.get("label_key", "label")),
                 "stratify": dataset_cfg.get("stratify", splits_cfg.get("stratify", True)),
                 "sampling_strategy": dataset_cfg.get("sampling_strategy", "default"),
+                "group_key": dataset_cfg.get("group_key"),
             },
         },
         "splits": {
@@ -219,6 +201,7 @@ def _build_manifest(
         "stats": {
             "num_examples_loaded": num_examples,
             "label_counts": label_counts,
+            "group_stats": group_stats,
         },
     }
 
@@ -227,7 +210,7 @@ def _compute_label_counts(examples: List[Dict[str, Any]], label_key: str) -> Opt
     """Compute label counts if label_key exists in examples."""
     if not examples:
         return None
-    if label_key not in examples[0]:
+    if all(label_key not in ex for ex in examples):
         return None
 
     counts: Dict[str, int] = {}
@@ -239,6 +222,31 @@ def _compute_label_counts(examples: List[Dict[str, Any]], label_key: str) -> Opt
         counts[k] = counts.get(k, 0) + 1
     return counts
 
+def _compute_group_stats(examples: List[Dict[str, Any]], group_key: str) -> Optional[Dict[str, Any]]:
+    """Compute group counts + summary stats for round-robin sampling."""
+    if not examples:
+        return None
+    if all(group_key not in ex for ex in examples):
+        return None
+
+    counts: Dict[str, int] = {}
+    for ex in examples:
+        if group_key not in ex:
+            continue
+        g = str(ex[group_key])
+        counts[g] = counts.get(g, 0) + 1
+
+    if not counts:
+        return None
+
+    vals = list(counts.values())
+    return {
+        "group_key": group_key,
+        "num_groups": len(counts),
+        "min_group_size": min(vals),
+        "max_group_size": max(vals),
+        "group_counts": counts,
+    }
 
 def _run_default_sampling(
     *,
@@ -257,6 +265,90 @@ def _run_default_sampling(
         stratify=stratify,
         min_per_class=1,
     )
+
+
+def _run_round_robin_group_sampling(
+    *,
+    examples: List[Dict[str, Any]],
+    Ns: Sequence[int],
+    seeds: Sequence[int],
+    group_key: str,
+) -> Dict[int, Dict[int, List[int]]]:
+    """
+    Round-robin sampling across groups (e.g., RAFT tasks) with nested prefixes.
+
+    Deterministic per seed:
+      - group indices by examples[*][group_key]
+      - shuffle within each group using the seed
+      - interleave groups in a fixed order (sorted group ids)
+      - take prefixes for N in Ns (nesting guaranteed)
+    """
+    if not examples:
+        raise ValueError("examples is empty")
+    if not Ns:
+        raise ValueError("Ns is empty")
+    if list(Ns) != sorted(Ns):
+        raise ValueError("Ns must be sorted ascending for nested splits")
+    if not seeds:
+        raise ValueError("seeds is empty")
+
+    # Build group -> [indices]
+    indices_by_group: Dict[str, List[int]] = defaultdict(list)
+    for i, ex in enumerate(examples):
+        if group_key not in ex:
+            raise KeyError(f"Example missing group_key='{group_key}': {ex}")
+        g = str(ex[group_key])
+        indices_by_group[g].append(i)
+
+    group_ids = sorted(indices_by_group.keys())
+    if not group_ids:
+        raise ValueError(f"No groups found using group_key='{group_key}'")
+
+    # Pre-check size
+    if max(Ns) > len(examples):
+        raise ValueError(f"Max N={max(Ns)} exceeds dataset size={len(examples)}")
+
+    all_splits: Dict[int, Dict[int, List[int]]] = {}
+
+    for seed in seeds:
+        rng = random.Random(seed)
+
+        # Shuffle indices within each group (seeded)
+        shuffled: Dict[str, List[int]] = {}
+        for gid in group_ids:
+            idxs = indices_by_group[gid][:]
+            rng.shuffle(idxs)
+            shuffled[gid] = idxs
+
+        # Interleave in round-robin order
+        ordering: List[int] = []
+        ptrs = {gid: 0 for gid in group_ids}
+
+        # Continue until all groups exhausted
+        remaining = True
+        while remaining:
+            remaining = False
+            for gid in group_ids:
+                p = ptrs[gid]
+                if p < len(shuffled[gid]):
+                    ordering.append(shuffled[gid][p])
+                    ptrs[gid] = p + 1
+                    remaining = True
+
+        if len(ordering) != len(examples):
+            raise RuntimeError(
+                f"Round-robin ordering length {len(ordering)} "
+                f"!= num examples {len(examples)}"
+            )
+
+        # Now build nested prefixes for Ns
+        splits_for_seed: Dict[int, List[int]] = {}
+        for N in Ns:
+            splits_for_seed[N] = sorted(ordering[:N])  # stable file output
+
+        all_splits[seed] = splits_for_seed
+
+    return all_splits
 
 
 # -----------------------------
@@ -346,11 +438,6 @@ def main():
 
         # Effective sampling strategy
         sampling_strategy = dcfg.get("sampling_strategy", "default")
-        if sampling_strategy != "default":
-            raise NotImplementedError(
-                f"sampling_strategy='{sampling_strategy}' not implemented yet for dataset '{dname}'. "
-                f"(We will add RAFT round-robin next.)"
-            )
 
         # Sanity: dataset must be big enough
         if max(Ns) > len(examples):
@@ -359,13 +446,42 @@ def main():
             )
 
         # Compute splits (indices)
-        split_indices = _run_default_sampling(
-            examples=examples,
-            Ns=Ns,
-            seeds=seeds,
-            label_key=label_key,
-            stratify=stratify,
-        )
+        if sampling_strategy == "default":
+            split_indices = _run_default_sampling(
+                examples=examples,
+                Ns=Ns,
+                seeds=seeds,
+                label_key=label_key,
+                stratify=stratify,
+            )
+        elif sampling_strategy == "round_robin_group":
+            group_key = dcfg.get("group_key")
+            if not group_key:
+                raise KeyError(
+                    f"Dataset '{dname}' uses sampling_strategy='round_robin_group' but is missing 'group_key' in config."
+                )
+            split_indices = _run_round_robin_group_sampling(
+                examples=examples,
+                Ns=Ns,
+                seeds=seeds,
+                group_key=str(group_key),
+            )
+        else:
+            raise NotImplementedError(
+                f"sampling_strategy='{sampling_strategy}' not implemented for dataset '{dname}'."
+            )
+
+        group_stats = None
+        if sampling_strategy == "round_robin_group":
+            gk = str(dcfg["group_key"])
+            group_stats = _compute_group_stats(examples, group_key=gk)
+
+            # Optional but helpful log line
+            if group_stats:
+                print(
+                    f"Groups ({gk}): {group_stats['num_groups']} | "
+                    f"min={group_stats['min_group_size']} max={group_stats['max_group_size']}"
+                )
 
         # Stats for manifest
         label_counts = _compute_label_counts(examples, label_key=label_key)
@@ -387,6 +503,7 @@ def main():
             splits_cfg=splits_cfg,
             num_examples=len(examples),
             label_counts=label_counts,
+            group_stats=group_stats,
         )
         manifest_local = local_ds_dir / "manifest.json"
         _write_json(manifest_local, manifest)

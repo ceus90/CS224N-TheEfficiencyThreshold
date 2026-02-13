@@ -57,13 +57,15 @@
       {
         "name": "raft",
         "adapter": "raft",
-        "hf_id": "raft",
+        "hf_id": "ought/raft",
         "hf_config": null,
         "hf_split": "train",
-        "trust_remote_code": false,
+        "trust_remote_code": true,
+      
+        "sampling_strategy": "round_robin_group",
         "group_key": "task_name",
-        "round_robin_sampling": true
-      },
+        "stratify": false
+      },      
   
       {
         "name": "ifbench",
