@@ -51,7 +51,7 @@
         "hf_split": "train",
         "trust_remote_code": false,
         "text_key": "question",
-        "label_key": "answer"
+        "stratify": false
       },
   
       {
@@ -72,8 +72,7 @@
         "hf_config": null,
         "hf_split": "train",
         "trust_remote_code": false,
-        "text_key": "instruction",
-        "label_key": "response"
+        "text_key": "instruction"
       }
   
     ]

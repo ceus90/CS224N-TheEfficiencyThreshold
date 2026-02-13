@@ -219,7 +219,7 @@ def make_splits(
     - examples: list of standardized examples (dict-like)
     - Ns: list of N sizes (must be ascending for nesting)
     - seeds: list of integer seeds
-    - label_key: key to read labels from each example
+    - label_key: key to read labels from each example (only required if stratify=True)
     - stratify: whether to stratify by label_key
     - min_per_class: minimum examples per class when feasible
 
@@ -231,20 +231,45 @@ def make_splits(
     if not seeds:
         raise ValueError("seeds is empty")
 
-    # Extract labels once (cheap + consistent).
+    all_splits: AllSplits = {}
+    n_total = len(examples)
+
+    if not stratify:
+        # Unstratified: labels are irrelevant; just shuffle indices and take prefixes.
+        for seed in seeds:
+            rng = random.Random(seed)
+
+            # Deterministic shuffle of all indices for this seed.
+            all_idxs = list(range(n_total))
+            rng.shuffle(all_idxs)
+
+            # Take nested prefixes for each N.
+            splits_for_seed: SplitsForSeed = {}
+            for N in Ns:
+                splits_for_seed[N] = sorted(all_idxs[:N])  # sort for stable output
+
+            # Validate basic invariants.
+            check_sizes(splits_for_seed, Ns)
+            check_nested(splits_for_seed)
+
+            all_splits[seed] = splits_for_seed
+
+        return all_splits
+
+    # Stratified: we need labels.
     labels: List[Label] = []
     for ex in examples:
         if label_key not in ex:
             raise KeyError(f"Example missing label_key='{label_key}': {ex}")
         labels.append(ex[label_key])  # type: ignore[assignment]
 
-    all_splits: AllSplits = {}
+    # Build nested stratified splits per seed.
     for seed in seeds:
         splits_for_seed = make_nested_splits(
             labels=labels,
             Ns=Ns,
             seed=seed,
-            stratify=stratify,
+            stratify=True,
             min_per_class=min_per_class,
         )
         check_sizes(splits_for_seed, Ns)

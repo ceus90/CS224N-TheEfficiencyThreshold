@@ -249,14 +249,6 @@ def _run_default_sampling(
     stratify: bool,
 ) -> Dict[int, Dict[int, List[int]]]:
     """Default sampling path using src.splits.make_splits."""
-    # If not stratifying, label_key can be anything; make_splits still needs the key.
-    # So if stratify=False and examples don't have label_key, we fall back to a dummy label list.
-    if not stratify:
-        # Ensure label_key exists so make_splits doesn't crash.
-        for ex in examples:
-            if label_key not in ex:
-                ex[label_key] = "__dummy__"
-
     return make_splits(
         examples=examples,
         Ns=list(Ns),
