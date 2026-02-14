@@ -9,7 +9,7 @@ Goal:
 - Nested subsets (N16 ⊂ N32 ⊂ ...)
 
 This file is dataset-agnostic.
-Adapters should produce standardized examples, then call make_splits().
+Adapters should produce standardized examples, then call generate_splits().
 """
 
 from __future__ import annotations
@@ -119,7 +119,7 @@ def allocate_counts(
     return alloc
 
 
-def make_nested_splits(
+def generate_nested_splits(
     labels: Sequence[Label],
     Ns: Sequence[int],
     seed: int,
@@ -204,7 +204,7 @@ def make_nested_splits(
     return splits
 
 
-def make_splits(
+def generate_splits(
     examples: Sequence[Mapping[str, Any]],
     Ns: Sequence[int],
     seeds: Sequence[int],
@@ -265,7 +265,7 @@ def make_splits(
 
     # Build nested stratified splits per seed.
     for seed in seeds:
-        splits_for_seed = make_nested_splits(
+        splits_for_seed = generate_nested_splits(
             labels=labels,
             Ns=Ns,
             seed=seed,

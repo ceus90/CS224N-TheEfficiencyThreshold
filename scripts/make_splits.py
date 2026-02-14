@@ -5,7 +5,7 @@ Generate few-shot splits for multiple datasets and upload to GCS.
 This script:
 - Reads configs/splits.json
 - Calls each dataset adapter via a uniform entrypoint: load_examples(dataset_cfg) -> list[dict]
-- Uses src.splits.make_splits(...) to produce nested splits (unless a dataset uses a special strategy)
+- Uses src.splits.generate_splits(...) to produce nested splits (unless a dataset uses a special strategy)
 - Writes JSONL files locally
 - Uploads JSONL + a manifest.json to Google Cloud Storage
 
@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 from google.cloud import storage
 
-from src.splits import make_splits, indices_to_examples
+from src.splits import generate_splits, indices_to_examples
 
 # -----------------------------
 # Small utilities
@@ -256,8 +256,8 @@ def _run_default_sampling(
     label_key: str,
     stratify: bool,
 ) -> Dict[int, Dict[int, List[int]]]:
-    """Default sampling path using src.splits.make_splits."""
-    return make_splits(
+    """Default sampling path using src.splits.generate_splits."""
+    return generate_splits(
         examples=examples,
         Ns=list(Ns),
         seeds=list(seeds),

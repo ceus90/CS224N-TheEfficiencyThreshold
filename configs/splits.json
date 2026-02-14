@@ -65,16 +65,6 @@
         "sampling_strategy": "round_robin_group",
         "group_key": "task_name",
         "stratify": false
-      },      
-  
-      {
-        "name": "ifbench",
-        "adapter": "ifbench",
-        "hf_id": "ifbench",
-        "hf_config": null,
-        "hf_split": "train",
-        "trust_remote_code": false,
-        "text_key": "instruction"
       }
   
     ]
