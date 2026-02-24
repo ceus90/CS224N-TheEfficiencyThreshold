@@ -1,5 +1,2 @@
-data/splits_out/financial_phrasebank
-data/splits_out/raft
-data/splits_out/gsm8k
 **/__pycache__/
 *.pyc
