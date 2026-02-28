@@ -1,0 +1,41 @@
+{
+  "created_at_utc": "2026-02-28T06:56:15Z",
+  "dataset": {
+    "name": "ifbench",
+    "adapter": "ifbench",
+    "source": {
+      "hf_id": "google/IFEval",
+      "hf_config": null,
+      "hf_split": "train",
+      "trust_remote_code": false
+    },
+    "settings": {
+      "label_key": "label",
+      "stratify": false,
+      "sampling_strategy": "default",
+      "group_key": null
+    }
+  },
+  "splits": {
+    "Ns": [
+      16,
+      32,
+      64,
+      128,
+      256
+    ],
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "nested": true
+  },
+  "stats": {
+    "num_examples_loaded": 541,
+    "label_counts": {
+      "generation": 541
+    },
+    "group_stats": null
+  }
+}
