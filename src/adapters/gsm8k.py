@@ -44,11 +44,6 @@ def make_example_id(config: str, split: str, row_idx: int) -> str:
     return f"gsm8k_{config}_{split}_{row_idx:06d}"
 
 
-def format_input(question: str) -> str:
-    """Format GSM8K input text consistently."""
-    return f"Question: {question}\nAnswer:"
-
-
 def extract_final_answer(answer_text: str) -> str:
     """
     Extract GSM8K final answer from the `answer` field.
@@ -106,7 +101,7 @@ def load_examples_gsm8k(
         question = row["question"]
         answer_full = row["answer"]
 
-        x = format_input(question=question)
+        x = question
         y = extract_final_answer(answer_full)
 
         examples.append(

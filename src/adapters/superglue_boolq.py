@@ -55,8 +55,7 @@ def make_example_id(split: str, row_idx: int) -> str:
 
 def format_input(passage: str, question: str) -> str:
     """Format BoolQ input text consistently."""
-    # Matches the exact prompt format you defined earlier in DataProcessor
-    return f"Passage: {passage}\nQuestion: {question}\nAnswer (True or False): "
+    return f"Passage: {passage}\nQuestion: {question} "
 
 
 def load_examples_boolq(

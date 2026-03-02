@@ -10,6 +10,8 @@ This script:
 - Uploads JSONL + a manifest.json to Google Cloud Storage
 
 Run (from repo root):
+  python3 -m scripts.make_splits --config configs/splits.json --datasets raft
+
   python scripts/make_splits.py --config configs/splits.json
 
 Optional:
@@ -170,6 +172,7 @@ def _build_manifest(
     *,
     dataset_cfg: Dict[str, Any],
     splits_cfg: Dict[str, Any],
+    Ns_used: Sequence[int],
     num_examples: int,
     label_counts: Optional[Dict[str, int]],
     group_stats: Optional[Dict[str, Any]],
@@ -194,7 +197,8 @@ def _build_manifest(
             },
         },
         "splits": {
-            "Ns": splits_cfg.get("Ns"),
+            "Ns_requested": splits_cfg.get("Ns"),
+            "Ns_used": list(Ns_used),
             "seeds": splits_cfg.get("seeds"),
             "nested": splits_cfg.get("nested", True),
         },
@@ -440,16 +444,22 @@ def main():
         sampling_strategy = dcfg.get("sampling_strategy", "default")
 
         # Sanity: dataset must be big enough
-        if max(Ns) > len(examples):
-            raise ValueError(
-                f"Dataset '{dname}' too small: size={len(examples)} < maxN={max(Ns)}"
+        Ns_eff = [N for N in Ns if N <= len(examples)]
+        if not Ns_eff:
+            print(f"[skip] Dataset '{dname}' too small: size={len(examples)} < minN={min(Ns)}")
+            continue
+
+        if Ns_eff != list(Ns):
+            print(
+                f"[warn] Dataset '{dname}' too small for some Ns: size={len(examples)}, "
+                f"requested Ns={Ns}, using Ns={Ns_eff}"
             )
 
         # Compute splits (indices)
         if sampling_strategy == "default":
             split_indices = _run_default_sampling(
                 examples=examples,
-                Ns=Ns,
+                Ns=Ns_eff,
                 seeds=seeds,
                 label_key=label_key,
                 stratify=stratify,
@@ -462,7 +472,7 @@ def main():
                 )
             split_indices = _run_round_robin_group_sampling(
                 examples=examples,
-                Ns=Ns,
+                Ns=Ns_eff,
                 seeds=seeds,
                 group_key=str(group_key),
             )
@@ -501,6 +511,7 @@ def main():
         manifest = _build_manifest(
             dataset_cfg=dcfg,
             splits_cfg=splits_cfg,
+            Ns_used=Ns_eff,
             num_examples=len(examples),
             label_counts=label_counts,
             group_stats=group_stats,
@@ -522,7 +533,7 @@ def main():
         num_uploaded = 0
 
         for seed in seeds:
-            for N in Ns:
+            for N in Ns_eff:
                 idxs = split_indices[seed][N]
                 rows = indices_to_examples(examples, idxs)
 

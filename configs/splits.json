@@ -54,12 +54,12 @@
       "name": "raft",
       "adapter": "raft",
       "hf_id": "ought/raft",
-      "hf_config": null,
+      "hf_config": "ade_corpus_v2",
+      "trust_remote_code": false,
       "hf_split": "train",
-      "trust_remote_code": true,
-      "sampling_strategy": "round_robin_group",
+      "sampling_strategy": "default",
       "group_key": "task_name",
-      "stratify": false
+      "stratify": true
     },
     {
       "name": "superglue_boolq",

@@ -37,12 +37,6 @@ def make_example_id(split: str, row_idx: int) -> str:
     """Create a stable example id."""
     return f"ifbench_{split}_{row_idx:06d}"
 
-
-def format_input(prompt: str) -> str:
-    """Format IFBench input text consistently."""
-    return f"Instruction: {prompt}\nResponse: "
-
-
 def load_examples_ifbench(
     split: str = "train",
     trust_remote_code: bool = False,
@@ -81,7 +75,7 @@ def load_examples_ifbench(
         
         # IFEval doesn't have a strict output label, so we leave it empty
         y = ""
-        x = format_input(prompt=prompt)
+        x = prompt
 
         examples.append(
             {

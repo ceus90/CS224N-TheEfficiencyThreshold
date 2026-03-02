@@ -61,6 +61,39 @@ _PREFERRED_TEXT_KEYS: Tuple[str, ...] = (
     "headline",
 )
 
+# -----------------------------
+# Formatting helpers (STRICT)
+# -----------------------------
+
+# Keep the existing _PREFERRED_TEXT_KEYS, but use a strict priority order for "main text"
+# (works across many RAFT tasks)
+_STRICT_TEXT_PRIORITY: Tuple[str, ...] = (
+    "text",
+    "sentence",
+    "query",
+    "question",
+    "review",
+    "comment",
+    "body",
+    "context",
+    "passage",
+    "headline",
+    "title",
+)
+
+# Exclude obvious metadata fields. (Keep URLs if they appear inside the chosen main text.)
+_EXCLUDE_INPUT_KEYS: Tuple[str, ...] = (
+    "id",
+    "idx",
+    "row_idx",
+    "example_id",
+    "paper_link",
+    "link",
+    "url",
+    "href",
+)
+
+
 _COMMON_LABEL_KEYS: Tuple[str, ...] = (
     "label",
     "labels",
@@ -91,31 +124,65 @@ def _format_as_kv_block(row: Dict[str, Any], keys: Sequence[str]) -> str:
         lines.append(f"{k}: {v}")
     return "\n".join(lines).strip()
 
-
 def _format_input(row: Dict[str, Any], columns: Sequence[str], label_key: Optional[str]) -> str:
     """
-    Heuristic formatting for RAFT input text.
-
-    Strategy:
-      1) If there are preferred text keys, format them nicely.
-      2) Else, fall back to a key/value listing of non-label fields.
+    STRICT RAFT input text:
+      - Return ONLY the main text that should be classified (no "key: value" formatting).
+      - Prefer a single best text field when possible.
+      - Handle paired fields (sentence1/sentence2, premise/hypothesis).
+      - Keep URLs (do not strip them).
+      - Avoid obvious metadata fields (ids/links-as-fields).
     """
-    # Prefer known text-like keys if present
-    present_text_keys = [k for k in _PREFERRED_TEXT_KEYS if k in columns and row.get(k) is not None]
+
+    def _val(k: str) -> str:
+        v = row.get(k)
+        return "" if v is None else str(v).strip()
+
+    # 1) Handle common paired-input tasks first
+    if "sentence1" in columns and "sentence2" in columns and row.get("sentence1") is not None and row.get("sentence2") is not None:
+        s1, s2 = _val("sentence1"), _val("sentence2")
+        return f"{s1}\n{s2}".strip()
+
+    if "premise" in columns and "hypothesis" in columns and row.get("premise") is not None and row.get("hypothesis") is not None:
+        p, h = _val("premise"), _val("hypothesis")
+        return f"{p}\n{h}".strip()
+
+    # 2) Strict single-field selection: pick the highest-priority main text key available
+    for k in _STRICT_TEXT_PRIORITY:
+        if k in columns and k not in _EXCLUDE_INPUT_KEYS and row.get(k) is not None:
+            s = _val(k)
+            if s:
+                return s
+
+    # 3) Secondary selection: if any preferred text-like key exists, pick the first present (stable order)
+    present_text_keys = [
+        k for k in _PREFERRED_TEXT_KEYS
+        if k in columns and k not in _EXCLUDE_INPUT_KEYS and row.get(k) is not None and _val(k)
+    ]
     if present_text_keys:
-        # Special-case pairs that often belong together
-        if "sentence1" in present_text_keys and "sentence2" in present_text_keys:
-            return f"Sentence 1: {row['sentence1']}\nSentence 2: {row['sentence2']}".strip()
-        if "premise" in present_text_keys and "hypothesis" in present_text_keys:
-            return f"Premise: {row['premise']}\nHypothesis: {row['hypothesis']}".strip()
+        return _val(present_text_keys[0])
 
-        # Otherwise, just include them in order
-        return _format_as_kv_block(row, present_text_keys)
+    # 4) Last-resort fallback: find the "best looking" string field among non-label, non-excluded columns
+    #    (still returns ONLY a value, never "k: v")
+    candidates: List[str] = []
+    for c in columns:
+        if c == label_key or c in _EXCLUDE_INPUT_KEYS:
+            continue
+        v = row.get(c)
+        if v is None:
+            continue
+        # Prefer plain strings
+        if isinstance(v, str):
+            s = v.strip()
+            if s:
+                candidates.append(s)
 
-    # Fall back to all non-label fields as key/value pairs (stable order: columns order)
-    non_label_cols = [c for c in columns if c != label_key]
-    return _format_as_kv_block(row, non_label_cols)
+    if candidates:
+        # Heuristic: choose the longest string as the most likely "main text"
+        return max(candidates, key=len).strip()
 
+    # If truly nothing usable, return empty string (caller can decide how to handle)
+    return ""
 
 def _label_to_string(ds_split, label_key: str, raw_label: Any) -> str:
     """
@@ -182,7 +249,7 @@ def load_examples_raft(
     all_examples: List[Dict[str, Any]] = []
 
     for task_name in task_names:
-        ds = load_dataset(hf_id, task_name, trust_remote_code=trust_remote_code)
+        ds = load_dataset(hf_id, task_name)
 
         if split not in ds:
             raise KeyError(
@@ -260,11 +327,10 @@ def load_examples(dataset_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 if __name__ == "__main__":
     exs = load_examples_raft(
-        hf_id="ought/raft", 
-        hf_config=None, 
-        split="train", 
-        trust_remote_code=True,
-    )
+    hf_id="ought/raft",
+    hf_config=[ "ade_corpus_v2"],
+    split="train",
+)
     print("Loaded examples:", len(exs))
 
     # Group counts (tasks)

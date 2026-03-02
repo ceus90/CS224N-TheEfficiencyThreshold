@@ -1,28 +1,32 @@
 {
-  "created_at_utc": "2026-02-14T01:30:28Z",
+  "created_at_utc": "2026-03-02T05:49:19Z",
   "dataset": {
     "name": "raft",
     "adapter": "raft",
     "source": {
       "hf_id": "ought/raft",
-      "hf_config": null,
+      "hf_config": "ade_corpus_v2",
       "hf_split": "train",
-      "trust_remote_code": true
+      "trust_remote_code": false
     },
     "settings": {
       "label_key": "label",
-      "stratify": false,
-      "sampling_strategy": "round_robin_group",
+      "stratify": true,
+      "sampling_strategy": "default",
       "group_key": "task_name"
     }
   },
   "splits": {
-    "Ns": [
+    "Ns_requested": [
       16,
       32,
       64,
       128,
       256
+    ],
+    "Ns_used": [
+      16,
+      32
     ],
     "seeds": [
       0,
@@ -32,86 +36,11 @@
     "nested": true
   },
   "stats": {
-    "num_examples_loaded": 550,
+    "num_examples_loaded": 50,
     "label_counts": {
       "not ADE-related": 35,
-      "ADE-related": 15,
-      "change_pin": 1,
-      "declined_card_payment": 2,
-      "top_up_failed": 3,
-      "card_payment_fee_charged": 2,
-      "balance_not_updated_after_bank_transfer": 2,
-      "declined_transfer": 2,
-      "extra_charge_on_statement": 2,
-      "reverted_card_payment?": 1,
-      "beneficiary_not_allowed": 1,
-      "card_payment_wrong_exchange_rate": 1,
-      "top_up_by_card_charge": 1,
-      "top_up_limits": 1,
-      "country_support": 2,
-      "balance_not_updated_after_cheque_or_cash_deposit": 1,
-      "verify_my_identity": 1,
-      "card_delivery_estimate": 2,
-      "automatic_top_up": 2,
-      "getting_spare_card": 1,
-      "why_verify_identity": 1,
-      "supported_cards_and_currencies": 1,
-      "wrong_exchange_rate_for_cash_withdrawal": 2,
-      "pending_top_up": 1,
-      "cash_withdrawal_charge": 1,
-      "pending_transfer": 2,
-      "exchange_rate": 1,
-      "disposable_card_limits": 1,
-      "card_linking": 1,
-      "pending_card_payment": 1,
-      "cash_withdrawal_not_recognised": 1,
-      "request_refund": 1,
-      "card_arrival": 2,
-      "get_physical_card": 1,
-      "visa_or_mastercard": 1,
-      "direct_debit_payment_not_recognised": 1,
-      "edit_personal_details": 1,
-      "verify_source_of_funds": 1,
-      "wrong_amount_of_cash_received": 1,
-      "potentially unfair": 9,
-      "not potentially unfair": 41,
-      "TAI safety research": 28,
-      "not TAI safety research": 22,
-      "doesn't mention a harmful application": 27,
-      "mentions a harmful application": 23,
-      "overruling": 25,
-      "not overruling": 25,
-      "not included": 49,
-      "included": 1,
-      "intermediate": 12,
-      "advanced": 18,
-      "elementary": 20,
-      "not hate speech": 29,
-      "hate speech": 21,
-      "no complaint": 33,
-      "complaint": 17,
-      "university": 6,
-      "company": 38,
-      "research institute": 6
+      "ADE-related": 15
     },
-    "group_stats": {
-      "group_key": "task_name",
-      "num_groups": 11,
-      "min_group_size": 50,
-      "max_group_size": 50,
-      "group_counts": {
-        "ade_corpus_v2": 50,
-        "banking_77": 50,
-        "terms_of_service": 50,
-        "tai_safety_research": 50,
-        "neurips_impact_statement_risks": 50,
-        "overruling": 50,
-        "systematic_review_inclusion": 50,
-        "one_stop_english": 50,
-        "tweet_eval_hate": 50,
-        "twitter_complaints": 50,
-        "semiconductor_org_types": 50
-      }
-    }
+    "group_stats": null
   }
 }
