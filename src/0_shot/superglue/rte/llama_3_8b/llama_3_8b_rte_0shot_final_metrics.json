@@ -1,0 +1,12 @@
+{
+  "method": "0_shot_vllm",
+  "model": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "dataset": "super_glue/rte:validation",
+  "eval_size": 277,
+  "accuracy": 0.7833935018050542,
+  "accuracy_known_only": 0.7833935018050542,
+  "unknown_frac": 0.0,
+  "total_new_tokens": 1183,
+  "gen_tokens_per_sec": 172.07090129173295,
+  "total_gen_time_min": 0.11458454926808676
+}

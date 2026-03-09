@@ -1,0 +1,139 @@
+{
+  "model": "Qwen/Qwen3-8B",
+  "enable_thinking": false,
+  "tasks": [
+    "ade_corpus_v2",
+    "banking_77",
+    "neurips_impact_statement_risks",
+    "one_stop_english",
+    "overruling",
+    "semiconductor_org_types",
+    "tai_safety_research",
+    "terms_of_service",
+    "tweet_eval_hate",
+    "twitter_complaints"
+  ],
+  "per_task": [
+    {
+      "task": "ade_corpus_v2",
+      "n_train": 50,
+      "n_test": 5000,
+      "accuracy": 0.14,
+      "accuracy_known": 0.14,
+      "unknown_frac": 0.0,
+      "n_labels": 2,
+      "total_new_tokens": 20660,
+      "throughput_tok_per_sec": 238.1,
+      "gen_time_min": 1.45
+    },
+    {
+      "task": "banking_77",
+      "n_train": 50,
+      "n_test": 5000,
+      "accuracy": 0.24,
+      "accuracy_known": 0.2449,
+      "unknown_frac": 0.02,
+      "n_labels": 77,
+      "total_new_tokens": 22244,
+      "throughput_tok_per_sec": 291.4,
+      "gen_time_min": 1.27
+    },
+    {
+      "task": "neurips_impact_statement_risks",
+      "n_train": 50,
+      "n_test": 150,
+      "accuracy": 0.9,
+      "accuracy_known": 0.9,
+      "unknown_frac": 0.0,
+      "n_labels": 2,
+      "total_new_tokens": 1252,
+      "throughput_tok_per_sec": 81.2,
+      "gen_time_min": 0.26
+    },
+    {
+      "task": "one_stop_english",
+      "n_train": 50,
+      "n_test": 516,
+      "accuracy": 0.4,
+      "accuracy_known": 0.4,
+      "unknown_frac": 0.0,
+      "n_labels": 3,
+      "total_new_tokens": 1617,
+      "throughput_tok_per_sec": 10.4,
+      "gen_time_min": 2.59
+    },
+    {
+      "task": "overruling",
+      "n_train": 50,
+      "n_test": 2350,
+      "accuracy": 0.96,
+      "accuracy_known": 0.96,
+      "unknown_frac": 0.0,
+      "n_labels": 2,
+      "total_new_tokens": 10844,
+      "throughput_tok_per_sec": 203.2,
+      "gen_time_min": 0.89
+    },
+    {
+      "task": "semiconductor_org_types",
+      "n_train": 50,
+      "n_test": 449,
+      "accuracy": 0.02,
+      "accuracy_known": 0.02,
+      "unknown_frac": 0.0,
+      "n_labels": 5,
+      "total_new_tokens": 1144,
+      "throughput_tok_per_sec": 188.8,
+      "gen_time_min": 0.1
+    },
+    {
+      "task": "tai_safety_research",
+      "n_train": 50,
+      "n_test": 1639,
+      "accuracy": 0.28,
+      "accuracy_known": 0.28,
+      "unknown_frac": 0.0,
+      "n_labels": 2,
+      "total_new_tokens": 9644,
+      "throughput_tok_per_sec": 97.1,
+      "gen_time_min": 1.66
+    },
+    {
+      "task": "terms_of_service",
+      "n_train": 50,
+      "n_test": 5000,
+      "accuracy": 0.76,
+      "accuracy_known": 0.76,
+      "unknown_frac": 0.0,
+      "n_labels": 2,
+      "total_new_tokens": 20200,
+      "throughput_tok_per_sec": 214.2,
+      "gen_time_min": 1.57
+    },
+    {
+      "task": "tweet_eval_hate",
+      "n_train": 50,
+      "n_test": 2966,
+      "accuracy": 0.26,
+      "accuracy_known": 0.26,
+      "unknown_frac": 0.0,
+      "n_labels": 2,
+      "total_new_tokens": 12064,
+      "throughput_tok_per_sec": 230.3,
+      "gen_time_min": 0.87
+    },
+    {
+      "task": "twitter_complaints",
+      "n_train": 50,
+      "n_test": 3399,
+      "accuracy": 0.12,
+      "accuracy_known": 0.12,
+      "unknown_frac": 0.0,
+      "n_labels": 2,
+      "total_new_tokens": 12309,
+      "throughput_tok_per_sec": 244.7,
+      "gen_time_min": 0.84
+    }
+  ],
+  "mean_accuracy": 0.40800000000000003
+}

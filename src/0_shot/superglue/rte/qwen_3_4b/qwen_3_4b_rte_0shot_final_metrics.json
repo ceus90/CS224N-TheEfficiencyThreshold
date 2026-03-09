@@ -1,0 +1,12 @@
+{
+  "method": "0_shot_vllm_thinking=False",
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "dataset": "super_glue/rte:validation",
+  "eval_size": 277,
+  "accuracy": 0.8664259927797834,
+  "accuracy_known_only": 0.8664259927797834,
+  "unknown_frac": 0.0,
+  "total_new_tokens": 1236,
+  "gen_tokens_per_sec": 309.8443459064063,
+  "total_gen_time_min": 0.06648499568303426
+}

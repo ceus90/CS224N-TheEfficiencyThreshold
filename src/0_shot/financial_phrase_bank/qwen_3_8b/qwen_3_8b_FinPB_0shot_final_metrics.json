@@ -1,0 +1,11 @@
+{
+  "method": "0_shot_vllm_thinking=False",
+  "model": "Qwen/Qwen3-8B",
+  "dataset": "FinanceMTEB/financial_phrasebank:test",
+  "eval_size": 1000,
+  "accuracy": 0.963,
+  "unknown_frac": 0.0,
+  "total_new_tokens": 2000,
+  "gen_tokens_per_sec": 126.75943410638794,
+  "total_gen_time_min": 0.2629653056462606
+}

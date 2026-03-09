@@ -1,0 +1,10 @@
+{
+  "method": "0_shot",
+  "model": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "dataset": "financial_phrasebank/sentences_allagree",
+  "eval_size": 1319,
+  "accuracy": 0.7445034116755117,
+  "unknown_frac": 0.0,
+  "gen_tokens_per_sec": 28.779525316103694,
+  "total_gen_time_min": 95.31950127283731
+}

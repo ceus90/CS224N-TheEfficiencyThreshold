@@ -1,0 +1,10 @@
+{
+  "method": "icl_0_shot_vllm_thinking=False",
+  "model": "Qwen/Qwen3-8B",
+  "eval_size": 1319,
+  "accuracy": 0.8764215314632298,
+  "unknown_frac": 0.0,
+  "total_new_tokens": 344148,
+  "gen_tokens_per_sec": 843.3946104212731,
+  "total_gen_time_min": 6.800849719842275
+}
