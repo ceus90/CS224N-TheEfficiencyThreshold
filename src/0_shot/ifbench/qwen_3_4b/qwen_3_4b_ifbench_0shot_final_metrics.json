@@ -1,0 +1,15 @@
+{
+  "method": "0_shot_vllm_thinking=False",
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "dataset": "allenai/IFBench_test",
+  "eval_size": 300,
+  "total_constraints": 344,
+  "unique_constraint_types": 58,
+  "strict_prompt_accuracy": 0.3033,
+  "strict_instruction_accuracy": 0.3314,
+  "loose_prompt_accuracy": 0.3333,
+  "loose_instruction_accuracy": 0.3663,
+  "total_new_tokens": 182091,
+  "gen_tokens_per_sec": 1081.19,
+  "total_gen_time_min": 2.807
+}
