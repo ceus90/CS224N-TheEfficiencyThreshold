@@ -31,7 +31,9 @@ output_volume = modal.Volume.from_name("reft-reports", create_if_missing=True)
     cpu=4.0,
     memory=65536,
     gpu="B200",
-    timeout=43200,    volumes={"/workspace/reports": output_volume}
+    timeout=43200,
+    secrets=[modal.Secret.from_name("hf-token")],
+    volumes={"/workspace/reports": output_volume}
 )
 def execute_lora_pipeline():
     import os
@@ -60,39 +62,39 @@ def execute_lora_pipeline():
     login(token=hf_token)
 
     MODELS = {
-        # "Llama-3-8B": {"id": "meta-llama/Meta-Llama-3-8B", "cot": False}, # other D
-        # "Llama-3-8B-Instruct": {"id": "meta-llama/Meta-Llama-3-8B-Instruct", "cot": False}, # other 
-        # "Qwen3-4B": {"id": "Qwen/Qwen3-4B", "cot": False}, # done D
-        # "Qwen3-4B-Instruct-2507": {"id": "Qwen/Qwen3-4B-Instruct-2507", "cot": False}, # done D
-        # "Qwen3-8B": {"id": "Qwen/Qwen3-8B", "cot": False}, # done D
-        # "Qwen3-8B-Thinking": {"id": "Qwen/Qwen3-8B", "cot": True},
-        # "Qwen2.5-7B-Instruct": {"id": "Qwen/Qwen2.5-7B-Instruct", "cot": False},
-        # "Gemma-2-9B": {"id": "google/gemma-2-9b", "cot": False}, # current - 2 D
-        # "Gemma-2-9B-IT": {"id": "google/gemma-2-9b-it", "cot": False}
+        "Llama-3-8B": {"id": "meta-llama/Meta-Llama-3-8B"}, # 
+        "Llama-3-8B-Instruct": {"id": "meta-llama/Meta-Llama-3-8B-Instruct"}, #  
+        "Qwen3-4B": {"id": "Qwen/Qwen3-4B"}, # 
+        "Qwen3-4B-Instruct-2507": {"id": "Qwen/Qwen3-4B-Instruct-2507"}, # 
+        "Qwen3-8B": {"id": "Qwen/Qwen3-8B"}, # 
+        # "Qwen2.5-7B-Instruct": {"id": "Qwen/Qwen2.5-7B-Instruct"},
+        "Gemma-2-9B": {"id": "google/gemma-2-9b"}, # 
+        # "Gemma-2-9B-IT": {"id": "google/gemma-2-9b-it"}
     }
 
-    DATASETS = ["gsm8k", "superglue_rte", "superglue_boolq", "financial_phrasebank", "raft"]   # "dolly15k" 
-    N_SAMPLES = [16, 32, 64, 128, 256] 
+    DATASETS = [ "raft"] # "superglue_rte", "superglue_boolq", "financial_phrasebank",
+    N_SAMPLES = [16, 32, 64, 128, 256]
 
     EVAL_SAMPLES = {
-        "gsm8k": 250,
-        "superglue_rte": 250,
-        "superglue_boolq": 250,
-        "financial_phrasebank": 200,
-        # "dolly15k": 250,
-        "raft": 200
+        # "superglue_rte": 250,
+        # "superglue_boolq": 250,
+        # "financial_phrasebank": 250,
+        "raft": 250
     }
 
     results = {
-        ds: {m_name: {metric: [] for metric in ["accuracy", "latency", "vram_pct", "throughput", "train_time", "tpot"]}
+        ds: {m_name: {metric: [] for metric in [
+            "accuracy", "latency", "train_vram_pct", "eval_vram_pct",
+            "throughput_total", "throughput_output", "train_time", "tpot"
+        ]}
              for m_name in MODELS.keys()} for ds in DATASETS
     }
 
-    output_dir = "/workspace/reports/stratified"
+    output_dir = "/workspace/reports/lora"
     os.makedirs(output_dir, exist_ok=True)
     checkpoint_path = f"{output_dir}/LoRA_Efficiency_Checkpoint_2.jsonl"
     completed = set()
-    DISABLE_CHECKPOINT_SKIP = False
+    USE_CHECKPOINTS = True
 
     def load_checkpoint():
         nonlocal results, completed
@@ -112,8 +114,10 @@ def execute_lora_pipeline():
                     if m and d and isinstance(n, int) and m in results.get(d, {}):
                         results[d][m]["accuracy"].append(metrics.get("accuracy", 0.0))
                         results[d][m]["latency"].append(metrics.get("latency", 0.0))
-                        results[d][m]["vram_pct"].append(metrics.get("vram_pct", 0.0))
-                        results[d][m]["throughput"].append(metrics.get("throughput", 0.0))
+                        results[d][m]["train_vram_pct"].append(metrics.get("train_vram_pct", 0.0))
+                        results[d][m]["eval_vram_pct"].append(metrics.get("eval_vram_pct", 0.0))
+                        results[d][m]["throughput_total"].append(metrics.get("throughput_total", 0.0))
+                        results[d][m]["throughput_output"].append(metrics.get("throughput_output", 0.0))
                         results[d][m]["train_time"].append(metrics.get("train_time", 0.0))
                         results[d][m]["tpot"].append(metrics.get("tpot", 0.0))
                         completed.add((m, d, n))
@@ -128,97 +132,90 @@ def execute_lora_pipeline():
             print(f"[WARN] Failed to append checkpoint: {e}", flush=True)
 
     LABEL_MAPPINGS = {
-        "superglue_rte": {0: "entailment", 1: "not entailment"},
+        "superglue_rte": {0: "entailment", 1: "not_entailment"},
         "superglue_boolq": {0: "false", 1: "true"},
         "financial_phrasebank": {0: "negative", 1: "neutral", 2: "positive"},
-        "raft": {1: "adequate", 2: "inadequate"}
+        "raft": {1: "ade_related", 2: "not_ade_related"}
     }
 
-    def format_prompt(example, dataset_name, use_cot=False):
-        suffix = " Let's think step by step." if use_cot else ""
-        if dataset_name == "gsm8k":
-            return f"Question: {example['question']}{suffix}\nAnswer:"
-        elif dataset_name == "superglue_rte":
-            return f"Premise: {example['premise']}\nHypothesis: {example['hypothesis']}{suffix}\nEntailment:"
+    def format_prompt(example, dataset_name):
+        if dataset_name == "superglue_rte":
+            return (
+                f"Premise: {example['premise']}\n"
+                f"Hypothesis: {example['hypothesis']}\n\n"
+                "Choose one label from: entailment, not_entailment.\n"
+                "Output only the label.\n\n"
+                "Answer:\n"
+            )
         elif dataset_name == "superglue_boolq":
-            return f"Passage: {example['passage']}\nQuestion: {example['question']}{suffix}\nAnswer:"
+            return (
+                f"Passage: {example['passage']}\n"
+                f"Question: {example['question']}\n\n"
+                "Choose one label from: true, false.\n"
+                "Output only the label.\n\n"
+                "Answer:\n"
+            )
         elif dataset_name == "financial_phrasebank":
-            return f"Sentence: {example['sentence']}{suffix}\nSentiment:"
-        elif dataset_name == "dolly15k":
-            ctx = f"\nContext: {example['context']}" if example.get('context') else ""
-            return f"Instruction: {example['instruction']}{ctx}{suffix}\nResponse:"
+            return (
+                f"Sentence: {example['sentence']}\n\n"
+                "Choose one label from: positive, negative, neutral.\n"
+                "Output only the label.\n\n"
+                "Answer:\n"
+            )
         elif dataset_name == "raft":
-            return f"Sentence: {example['Sentence']}{suffix}\nLabel:"
+            return (
+                f"Sentence: {example['Sentence']}\n\n"
+                "Choose one label from: ade_related, not_ade_related.\n"
+                "Output only the label.\n\n"
+                "Answer:\n"
+            )
         else:
             txt = list(example.values())[0]
-            return f"Input: {txt}{suffix}\nOutput:"
-
-    def extract_first_number(text):
-        nums = re.findall(r'-?\d+(?:,\d{3})*(?:\.\d+)?', text)
-        return nums[0] if nums else ""
-
-    def extract_gsm8k_number(text):
-        first = extract_first_number(text)
-        if first:
-            return first
-        answer_match = re.search(r'Answer:\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)', text, flags=re.IGNORECASE)
-        if answer_match:
-            return answer_match.group(1)
-        hash_match = re.search(r'####\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)', text)
-        if hash_match:
-            return hash_match.group(1)
-        return ""
+            return f"Input: {txt}\nOutput:"
 
     def get_expected_label(dataset_name, val):
-        if dataset_name == "gsm8k":
-            match = re.search(r'####\s*(-?\d+)', str(val))
-            return match.group(1) if match else str(val).strip()
         if dataset_name in LABEL_MAPPINGS and isinstance(val, int):
             return LABEL_MAPPINGS[dataset_name].get(val, str(val))
         return str(val).strip()
 
+    LABEL_SETS = {
+        "superglue_rte": {"entailment", "not_entailment"},
+        "superglue_boolq": {"true", "false"},
+        "financial_phrasebank": {"positive", "negative", "neutral"},
+        "raft": {"ade_related", "not_ade_related"},
+    }
+
+    def parse_classification_prediction(dataset_name: str, response: str):
+        if response is None:
+            return None
+        allowed = LABEL_SETS[dataset_name]
+        lines = [line.strip() for line in response.splitlines() if line.strip()]
+        if not lines:
+            return None
+        pred = lines[0].lower().rstrip(".!,;:")
+        return pred if pred in allowed else None
+
+    def get_generated_suffix_from_gen_block(gen_row, eos_id, pad_id):
+        gen_tokens_i = gen_row
+        if eos_id is not None:
+            eos_pos = (gen_tokens_i == eos_id).nonzero(as_tuple=True)[0]
+            if len(eos_pos) > 0:
+                gen_tokens_i = gen_tokens_i[:eos_pos[0] + 1]
+        if pad_id is not None:
+            pad_pos = (gen_tokens_i == pad_id).nonzero(as_tuple=True)[0]
+            if len(pad_pos) > 0:
+                gen_tokens_i = gen_tokens_i[:pad_pos[0]]
+        return gen_tokens_i
+
     def check_correctness(expected, generated, dataset_name):
         exp = str(expected).strip().lower()
-        gen = str(generated).strip().lower()
+        gen = str(generated).strip()
 
-        if dataset_name == "gsm8k":
-            return exp == extract_gsm8k_number(gen)
-
-        def parse_label(text, dataset):
-            t = text.lower()
-            if dataset == "superglue_rte":
-                if re.search(r"\bnot\s+entailment\b", t):
-                    return "not entailment"
-                if re.search(r"\bentailment\b", t):
-                    return "entailment"
-            elif dataset == "superglue_boolq":
-                if re.search(r"\btrue\b", t):
-                    return "true"
-                if re.search(r"\bfalse\b", t):
-                    return "false"
-                if re.search(r"\byes\b", t):
-                    return "true"
-                if re.search(r"\bno\b", t):
-                    return "false"
-            elif dataset == "financial_phrasebank":
-                if re.search(r"\bnegative\b", t):
-                    return "negative"
-                if re.search(r"\bneutral\b", t):
-                    return "neutral"
-                if re.search(r"\bpositive\b", t):
-                    return "positive"
-            elif dataset == "raft":
-                if re.search(r"\binadequate\b", t):
-                    return "inadequate"
-                if re.search(r"\badequate\b", t):
-                    return "adequate"
-            return None
-
-        if dataset_name in LABEL_MAPPINGS:
-            pred = parse_label(gen, dataset_name)
+        if dataset_name in LABEL_SETS:
+            pred = parse_classification_prediction(dataset_name, gen)
             return pred == exp if pred is not None else False
 
-        return exp == gen
+        return exp == gen.lower()
 
     def prepare_data(dataset_name, n):
         target_eval_samples = EVAL_SAMPLES.get(dataset_name, 150)
@@ -303,15 +300,7 @@ def execute_lora_pipeline():
                     idxs.append(pool_fp_to_idx[f])
             return eval_pool.select(idxs)
 
-        if dataset_name == "gsm8k":
-            ds_full_train = load_dataset("gsm8k", "main", split="train", trust_remote_code=True)
-            ds_full_eval = load_dataset("gsm8k", "main", split="test", trust_remote_code=True)
-            t_n, e_n = min(n, len(ds_full_train)), min(target_eval_samples, len(ds_full_eval))
-            train = ds_full_train.select(range(t_n))
-            eval_ds = select_random(ds_full_eval, e_n)
-            key = "answer"
-            eval_ds = ensure_no_overlap(train, eval_ds, ds_full_eval, dataset_name)
-        elif dataset_name == "superglue_rte":
+        if dataset_name == "superglue_rte":
             ds_full_train = load_dataset("super_glue", "rte", split="train", trust_remote_code=True)
             ds_full_eval = load_dataset("super_glue", "rte", split="validation", trust_remote_code=True)
             t_n, e_n = min(n, len(ds_full_train)), min(target_eval_samples, len(ds_full_eval))
@@ -337,15 +326,6 @@ def execute_lora_pipeline():
             eval_ds = stratified_select(eval_pool, "label", e_n)
             key = "label"
             eval_ds = ensure_no_overlap(train, eval_ds, eval_pool, dataset_name)
-        elif dataset_name == "dolly15k":
-            ds_full = load_dataset("databricks/databricks-dolly-15k", split="train", trust_remote_code=True)
-            t_n = min(n, int(len(ds_full) * 0.8))
-            e_n = min(target_eval_samples, len(ds_full) - t_n)
-            train = ds_full.select(range(t_n))
-            eval_pool = ds_full.select(range(t_n, len(ds_full)))
-            eval_ds = select_random(eval_pool, e_n)
-            key = "response"
-            eval_ds = ensure_no_overlap(train, eval_ds, eval_pool, dataset_name)
         else:
             ds_full = load_dataset("ought/raft", "ade_corpus_v2", split="train", trust_remote_code=True)
             train_pool = ds_full.select(range(int(len(ds_full) * 0.8)))
@@ -363,7 +343,7 @@ def execute_lora_pipeline():
         def __init__(self, prompts, targets, tokenizer, max_len):
             self.items = []
             for p, t in zip(prompts, targets):
-                full = f"{p} {t}"
+                full = f"{p}{t}"
                 p_ids = tokenizer(
                     p,
                     truncation=True,
@@ -416,15 +396,16 @@ def execute_lora_pipeline():
 
     pbar = tqdm(total=len(MODELS) * len(DATASETS) * len(N_SAMPLES), desc="Benchmark Progress")
 
-    if not DISABLE_CHECKPOINT_SKIP:
+    if USE_CHECKPOINTS:
         load_checkpoint()
 
     for m_name, cfg in MODELS.items():
-        m_id, use_cot = cfg["id"], cfg["cot"]
+        m_id = cfg["id"]
 
+        printed_counts = {}
         for d_name in DATASETS:
             for n in N_SAMPLES:
-                if not DISABLE_CHECKPOINT_SKIP and (m_name, d_name, n) in completed:
+                if USE_CHECKPOINTS and (m_name, d_name, n) in completed:
                     print(f"[SKIP] Already completed Model: {m_name} | Dataset: {d_name} | Samples (N): {n}", flush=True)
                     pbar.update(1)
                     continue
@@ -472,7 +453,7 @@ def execute_lora_pipeline():
                 tokenizer.model_max_length = ctx_len
 
                 train_ds, ev_data, t_key = prepare_data(d_name, n)
-                train_prompts = [format_prompt(i, d_name, use_cot) for i in train_ds]
+                train_prompts = [format_prompt(i, d_name) for i in train_ds]
                 train_targets = [get_expected_label(d_name, i[t_key]) for i in train_ds]
                 train_dataset = SupervisedDataset(train_prompts, train_targets, tokenizer, ctx_len)
 
@@ -492,18 +473,25 @@ def execute_lora_pipeline():
                     data_collator=lambda b: collate_fn(b, tokenizer.pad_token_id)
                 )
 
+                torch.cuda.reset_peak_memory_stats()
                 train_start_time = time.time()
                 trainer.train()
                 train_duration = time.time() - train_start_time
+                train_vram_pct = (
+                    torch.cuda.max_memory_allocated() /
+                    torch.cuda.get_device_properties(0).total_memory
+                ) * 100
 
                 lora_model.eval()
+                torch.cuda.reset_peak_memory_stats()
                 correct, ms, tokens, ev_list = 0, 0, 0, list(ev_data)
+                processed_tokens = 0
                 prompt_truncated = False
 
                 if len(ev_list) > 0:
                     for idx in range(0, len(ev_list), 16):
                         batch = ev_list[idx:idx + 16]
-                        p_txts = [format_prompt(i, d_name, use_cot) for i in batch]
+                        p_txts = [format_prompt(i, d_name) for i in batch]
                         targets = [get_expected_label(d_name, i[t_key]) for i in batch]
                         lengths = tokenizer(
                             p_txts,
@@ -528,51 +516,82 @@ def execute_lora_pipeline():
                         with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                             out = lora_model.generate(
                                 **inputs,
-                                max_new_tokens=60 if use_cot else 25,
+                                max_new_tokens=8,
                                 pad_token_id=tokenizer.eos_token_id
                             )
 
                         torch.cuda.synchronize()
                         ms += (time.time() - start) * 1000
-                        tokens += (out.shape[1] - inputs["input_ids"].shape[1]) * len(batch)
+                        gen_start = inputs["input_ids"].shape[1]
+                        gen_block = out[:, gen_start:]
+                        batch_generated_tokens = 0
+                        eos_id = tokenizer.eos_token_id
+                        pad_id = tokenizer.pad_token_id
+                        for i in range(gen_block.shape[0]):
+                            gen_tokens_i = get_generated_suffix_from_gen_block(
+                                gen_block[i], eos_id, pad_id
+                            )
+                            batch_generated_tokens += int(gen_tokens_i.numel())
+                        tokens += batch_generated_tokens
+                        batch_input_tokens = int(inputs["attention_mask"].sum().item())
+                        processed_tokens += batch_input_tokens + batch_generated_tokens
 
-                        decs = tokenizer.batch_decode(out[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+                        decs = []
+                        for i in range(gen_block.shape[0]):
+                            gen_tokens_i = get_generated_suffix_from_gen_block(
+                                gen_block[i], eos_id, pad_id
+                            )
+                            decs.append(tokenizer.decode(gen_tokens_i, skip_special_tokens=True))
 
                         for exp, gen in zip(targets, decs):
                             if check_correctness(exp, gen, d_name):
                                 correct += 1
 
-                vram = (torch.cuda.max_memory_allocated() / torch.cuda.get_device_properties(0).total_memory) * 100
+                eval_vram_pct = (
+                    torch.cuda.max_memory_allocated() /
+                    torch.cuda.get_device_properties(0).total_memory
+                ) * 100
                 eval_len = max(1, len(ev_list))
 
                 total_latency_ms = ms / eval_len
-                total_throughput = tokens / (ms / 1000) if ms > 0 else 0
+                total_throughput = processed_tokens / (ms / 1000) if ms > 0 else 0
+                output_throughput = tokens / (ms / 1000) if ms > 0 else 0
                 avg_tpot = (ms / tokens) if tokens > 0 else 0
 
                 results[d_name][m_name]["accuracy"].append(correct / eval_len)
                 results[d_name][m_name]["latency"].append(total_latency_ms)
-                results[d_name][m_name]["vram_pct"].append(vram)
-                results[d_name][m_name]["throughput"].append(total_throughput)
+                results[d_name][m_name]["train_vram_pct"].append(train_vram_pct)
+                results[d_name][m_name]["eval_vram_pct"].append(eval_vram_pct)
+                results[d_name][m_name]["throughput_total"].append(total_throughput)
+                results[d_name][m_name]["throughput_output"].append(output_throughput)
                 results[d_name][m_name]["train_time"].append(train_duration)
                 results[d_name][m_name]["tpot"].append(avg_tpot)
 
+                print(
+                    f"[SCORE] {m_name} | {d_name} | N={n} | accuracy={correct}/{eval_len}={correct / eval_len:.4f}",
+                    flush=True
+                )
+
                 completed.add((m_name, d_name, n))
-                append_checkpoint({
-                    "timestamp": time.time(),
-                    "model": m_name,
-                    "model_id": m_id,
-                    "dataset": d_name,
-                    "n": n,
-                    "prompt_truncated": prompt_truncated,
-                    "metrics": {
-                        "accuracy": results[d_name][m_name]["accuracy"][-1],
-                        "latency": results[d_name][m_name]["latency"][-1],
-                        "vram_pct": results[d_name][m_name]["vram_pct"][-1],
-                        "throughput": results[d_name][m_name]["throughput"][-1],
-                        "train_time": results[d_name][m_name]["train_time"][-1],
-                        "tpot": results[d_name][m_name]["tpot"][-1]
-                    }
-                })
+                if USE_CHECKPOINTS:
+                    append_checkpoint({
+                        "timestamp": time.time(),
+                        "model": m_name,
+                        "model_id": m_id,
+                        "dataset": d_name,
+                        "n": n,
+                        "prompt_truncated": prompt_truncated,
+                        "metrics": {
+                            "accuracy": results[d_name][m_name]["accuracy"][-1],
+                            "latency": results[d_name][m_name]["latency"][-1],
+                            "train_vram_pct": results[d_name][m_name]["train_vram_pct"][-1],
+                            "eval_vram_pct": results[d_name][m_name]["eval_vram_pct"][-1],
+                            "throughput_total": results[d_name][m_name]["throughput_total"][-1],
+                            "throughput_output": results[d_name][m_name]["throughput_output"][-1],
+                            "train_time": results[d_name][m_name]["train_time"][-1],
+                            "tpot": results[d_name][m_name]["tpot"][-1]
+                        }
+                    })
 
                 lora_model = None
                 base_model = None
@@ -581,7 +600,7 @@ def execute_lora_pipeline():
 
     pbar.close()
 
-    metrics = ["accuracy", "latency", "vram_pct", "throughput", "train_time", "tpot"]
+    metrics = ["accuracy", "latency", "train_vram_pct", "eval_vram_pct", "throughput_total", "throughput_output", "train_time", "tpot"]
     colors = {
         "Llama-3-8B-Instruct": "blue",
         "Qwen3-4B": "orange",
@@ -596,32 +615,35 @@ def execute_lora_pipeline():
     def sanitize_name(name):
         return "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in name)
 
-    for m_name in MODELS.keys():
-        model_tag = sanitize_name(m_name)
-        pdf_path = f"{output_dir}/LoRA_Efficiency_Report_{model_tag}_2.pdf"
-        with PdfPages(pdf_path) as pdf:
-            for d_name in DATASETS:
-                fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-                fig.suptitle(f"LoRA Efficiency Benchmarks: {m_name} | {d_name}")
-                for i, mtr in enumerate(metrics):
-                    ax = axes.flatten()[i]
-                    y = results[d_name][m_name][mtr]
-                    if len(y) > 0:
-                        k = min(len(N_SAMPLES), len(y))
-                        ax.plot(
-                            N_SAMPLES[:k],
-                            y[:k],
-                            marker='o',
-                            color=colors.get(m_name, "black"),
-                            label=m_name
-                        )
-                    ax.set_title(mtr.capitalize())
-                    ax.legend(fontsize='x-small', ncol=1)
-                plt.tight_layout()
-                pdf.savefig(fig)
-                plt.close(fig)
+    if USE_CHECKPOINTS:
+        for m_name in MODELS.keys():
+            model_tag = sanitize_name(m_name)
+            pdf_path = f"{output_dir}/LoRA_Efficiency_Report_{model_tag}_2.pdf"
+            with PdfPages(pdf_path) as pdf:
+                for d_name in DATASETS:
+                    fig, axes = plt.subplots(3, 3, figsize=(18, 14))
+                    fig.suptitle(f"LoRA Efficiency Benchmarks: {m_name} | {d_name}")
+                    for i, mtr in enumerate(metrics):
+                        ax = axes.flatten()[i]
+                        y = results[d_name][m_name][mtr]
+                        if len(y) > 0:
+                            k = min(len(N_SAMPLES), len(y))
+                            ax.plot(
+                                N_SAMPLES[:k],
+                                y[:k],
+                                marker='o',
+                                color=colors.get(m_name, "black"),
+                                label=m_name
+                            )
+                        ax.set_title(mtr.capitalize())
+                        ax.legend(fontsize='x-small', ncol=1)
+                    for ax in axes.flatten()[len(metrics):]:
+                        ax.axis("off")
+                    plt.tight_layout()
+                    pdf.savefig(fig)
+                    plt.close(fig)
 
-        print(f"[COMPLETE] LoRA Efficiency Report saved to persistent volume: {pdf_path}", flush=True)
+            print(f"[COMPLETE] LoRA Efficiency Report saved to persistent volume: {pdf_path}", flush=True)
 
 
 @app.local_entrypoint()

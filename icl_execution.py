@@ -31,11 +31,12 @@ output_volume = modal.Volume.from_name("reft-reports", create_if_missing=True)
     cpu=4.0,
     memory=65536,
     gpu="B200",
-    timeout=43200,    volumes={"/workspace/reports": output_volume}
+    timeout=43200,
+    secrets=[modal.Secret.from_name("hf-token")],
+    volumes={"/workspace/reports": output_volume}
 )
 def execute_icl_pipeline():
     import os
-    import re
     import time
     import json
     import warnings
@@ -59,38 +60,41 @@ def execute_icl_pipeline():
     login(token=hf_token)
 
     MODELS = {
-        # "Llama-3-8B": {"id": "meta-llama/Meta-Llama-3-8B", "cot": False}, # done
-        # "Llama-3-8B-Instruct": {"id": "meta-llama/Meta-Llama-3-8B-Instruct", "cot": False}, # done
-        # "Qwen3-4B": {"id": "Qwen/Qwen3-4B", "cot": False}, # done
-        # "Qwen3-4B-Instruct-2507": {"id": "Qwen/Qwen3-4B-Instruct-2507", "cot": False}, # done
-        # "Qwen3-8B": {"id": "Qwen/Qwen3-8B", "cot": False}, # done
-        # "Qwen3-8B-Thinking": {"id": "Qwen/Qwen3-8B", "cot": True},
-        ## "Qwen2.5-7B-Instruct": {"id": "Qwen/Qwen2.5-7B-Instruct", "cot": False},
-        # "Gemma-2-9B": {"id": "google/gemma-2-9b", "cot": False}, # done
-        # "Gemma-2-9B-IT": {"id": "google/gemma-2-9b-it", "cot": False}
+        "Llama-3-8B": {"id": "meta-llama/Meta-Llama-3-8B"}, # done
+        "Llama-3-8B-Instruct": {"id": "meta-llama/Meta-Llama-3-8B-Instruct"}, # done
+        # "Qwen3-4B": {"id": "Qwen/Qwen3-4B"}, # done
+        "Qwen3-4B-Instruct-2507": {"id": "Qwen/Qwen3-4B-Instruct-2507"}, # done
+        "Qwen3-8B": {"id": "Qwen/Qwen3-8B"}, # done
+        ## "Qwen2.5-7B-Instruct": {"id": "Qwen/Qwen2.5-7B-Instruct"},
+        "Gemma-2-9B": {"id": "google/gemma-2-9b"}, # current
+        ## "Gemma-2-9B-IT": {"id": "google/gemma-2-9b-it"}
     }
 
-    DATASETS = ["superglue_rte", "superglue_boolq", "financial_phrasebank", "raft"] # "gsm8k" #"dolly15k",
-    N_SAMPLES = [16, 32, 64, 128, 256]
+    DATASETS = ["raft"] # "superglue_rte", "superglue_boolq", "financial_phrasebank",
+    N_SAMPLES = [16, 32, 64, 128, 256] # 
 
     EVAL_SAMPLES = {
-        # "gsm8k": 250,
-        "superglue_rte": 250,
-        "superglue_boolq": 250,
-        "financial_phrasebank": 200,
-       # "dolly15k": 250,
-        "raft": 200
+        # "superglue_rte": 250,
+        # "superglue_boolq": 250,
+        # "financial_phrasebank": 250,
+        "raft": 250
     }
 
+    METRICS = [
+        "accuracy", "latency", "vram_pct", "throughput_total", "throughput_output", "tpot",
+        "avg_input_tokens", "max_input_tokens", "truncation_rate"
+    ]
+
     results = {
-        ds: {m_name: {metric: [] for metric in ["accuracy", "latency", "vram_pct", "throughput", "train_time", "tpot"]}
+        ds: {m_name: {metric: [] for metric in METRICS}
              for m_name in MODELS.keys()} for ds in DATASETS
     }
 
-    output_dir = "/workspace/reports/stratified"
+    output_dir = "/workspace/reports/icl"
     os.makedirs(output_dir, exist_ok=True)
     checkpoint_path = f"{output_dir}/ICL_Efficiency_Checkpoint.jsonl"
     completed = set()
+    USE_CHECKPOINTS = True
 
     def load_checkpoint():
         nonlocal results, completed
@@ -111,9 +115,12 @@ def execute_icl_pipeline():
                         results[d][m]["accuracy"].append(metrics.get("accuracy", 0.0))
                         results[d][m]["latency"].append(metrics.get("latency", 0.0))
                         results[d][m]["vram_pct"].append(metrics.get("vram_pct", 0.0))
-                        results[d][m]["throughput"].append(metrics.get("throughput", 0.0))
-                        results[d][m]["train_time"].append(metrics.get("train_time", 0.0))
+                        results[d][m]["throughput_total"].append(metrics.get("throughput_total", 0.0))
+                        results[d][m]["throughput_output"].append(metrics.get("throughput_output", 0.0))
                         results[d][m]["tpot"].append(metrics.get("tpot", 0.0))
+                        results[d][m]["avg_input_tokens"].append(metrics.get("avg_input_tokens", 0.0))
+                        results[d][m]["max_input_tokens"].append(metrics.get("max_input_tokens", 0.0))
+                        results[d][m]["truncation_rate"].append(metrics.get("truncation_rate", 0.0))
                         completed.add((m, d, n))
         except Exception as e:
             print(f"[WARN] Failed to load checkpoint: {e}", flush=True)
@@ -126,97 +133,91 @@ def execute_icl_pipeline():
             print(f"[WARN] Failed to append checkpoint: {e}", flush=True)
 
     LABEL_MAPPINGS = {
-        "superglue_rte": {0: "entailment", 1: "not entailment"},
-        "superglue_boolq": {0: "false", 1: "true"},
-        "financial_phrasebank": {0: "negative", 1: "neutral", 2: "positive"},
-        "raft": {1: "adequate", 2: "inadequate"}
+      #  "superglue_rte": {0: "entailment", 1: "not_entailment"},
+       # "superglue_boolq": {0: "false", 1: "true"},
+      #  "financial_phrasebank": {0: "negative", 1: "neutral", 2: "positive"},
+        "raft": {1: "ade_related", 2: "not_ade_related"}
     }
 
-    def format_prompt(example, dataset_name, use_cot=False):
-        suffix = " Let's think step by step." if use_cot else ""
-        if dataset_name == "gsm8k":
-            return f"Question: {example['question']}{suffix}\nAnswer:"
-        elif dataset_name == "superglue_rte":
-            return f"Premise: {example['premise']}\nHypothesis: {example['hypothesis']}{suffix}\nEntailment:"
-        elif dataset_name == "superglue_boolq":
-            return f"Passage: {example['passage']}\nQuestion: {example['question']}{suffix}\nAnswer:"
-        elif dataset_name == "financial_phrasebank":
-            return f"Sentence: {example['sentence']}{suffix}\nSentiment:"
-        elif dataset_name == "dolly15k":
-            ctx = f"\nContext: {example['context']}" if example.get('context') else ""
-            return f"Instruction: {example['instruction']}{ctx}{suffix}\nResponse:"
-        elif dataset_name == "raft":
-            return f"Sentence: {example['Sentence']}{suffix}\nLabel:"
+    def format_prompt(example, dataset_name):
+        if dataset_name == "superglue_rte": # entailment / not_entailment
+            return (
+                f"Premise: {example['premise']}\n"
+                f"Hypothesis: {example['hypothesis']}\n\n"
+                "Choose one label from: entailment, not_entailment.\n"
+                "Output only the label.\n\n"
+                "Answer:\n"
+            )
+        elif dataset_name == "superglue_boolq": # true, false
+            return (
+                f"Passage: {example['passage']}\n"
+                f"Question: {example['question']}\n\n"
+                "Choose one label from: true, false.\n"
+                "Output only the label.\n\n"
+                "Answer:\n"
+            )
+        elif dataset_name == "financial_phrasebank": # positive, neutral, negative
+            return (
+                f"Sentence: {example['sentence']}\n\n"
+                "Choose one label from: positive, negative, neutral.\n"
+                "Output only the label.\n\n"
+                "Answer:\n"
+            )
+        elif dataset_name == "raft": # adequate, inadequate
+            return (
+                f"Sentence: {example['Sentence']}\n\n"
+                "Choose one label from: ade_related, not_ade_related.\n"
+                "Output only the label.\n\n"
+                "Answer:\n"
+            )
         else:
             txt = list(example.values())[0]
-            return f"Input: {txt}{suffix}\nOutput:"
-
-    def extract_first_number(text):
-        nums = re.findall(r'-?\d+(?:,\d{3})*(?:\.\d+)?', text)
-        return nums[0] if nums else ""
-
-    def extract_gsm8k_number(text):
-        first = extract_first_number(text)
-        if first:
-            return first
-        answer_match = re.search(r'Answer:\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)', text, flags=re.IGNORECASE)
-        if answer_match:
-            return answer_match.group(1)
-        hash_match = re.search(r'####\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)', text)
-        if hash_match:
-            return hash_match.group(1)
-        return ""
+            return f"Input: {txt}\nOutput:"
 
     def get_expected_label(dataset_name, val):
-        if dataset_name == "gsm8k":
-            match = re.search(r'####\s*(-?\d+)', str(val))
-            return match.group(1) if match else str(val).strip()
         if dataset_name in LABEL_MAPPINGS and isinstance(val, int):
             return LABEL_MAPPINGS[dataset_name].get(val, str(val))
         return str(val).strip()
 
+    LABEL_SETS = {
+        "superglue_rte": {"entailment", "not_entailment"},
+        "superglue_boolq": {"true", "false"},
+        "financial_phrasebank": {"positive", "negative", "neutral"},
+        "raft": {"ade_related", "not_ade_related"},
+    }
+
+    def parse_classification_prediction(dataset_name: str, response: str):
+        if response is None:
+            return None
+        allowed = LABEL_SETS[dataset_name]
+        lines = [line.strip() for line in response.splitlines() if line.strip()]
+        if not lines:
+            return None
+        pred = lines[0].lower().rstrip(".!,;:")
+        return pred if pred in allowed else None
+
+    def get_generated_suffix(out_row, attn_mask_row, eos_id, pad_id):
+        input_len_i = int(attn_mask_row.sum().item())
+        gen_tokens_i = out_row[input_len_i:]
+        if eos_id is not None:
+            eos_pos = (gen_tokens_i == eos_id).nonzero(as_tuple=True)[0]
+            if len(eos_pos) > 0:
+                gen_tokens_i = gen_tokens_i[:eos_pos[0] + 1]
+        if pad_id is not None:
+            pad_pos = (gen_tokens_i == pad_id).nonzero(as_tuple=True)[0]
+            if len(pad_pos) > 0:
+                gen_tokens_i = gen_tokens_i[:pad_pos[0]]
+        return gen_tokens_i
+
     def check_correctness(expected, generated, dataset_name):
         exp = str(expected).strip().lower()
-        gen = str(generated).strip().lower()
+        gen = str(generated).strip()
 
-        if dataset_name == "gsm8k":
-            return exp == extract_gsm8k_number(gen)
-
-        def parse_label(text, dataset):
-            t = text.lower()
-            if dataset == "superglue_rte":
-                if re.search(r"\bnot\s+entailment\b", t):
-                    return "not entailment"
-                if re.search(r"\bentailment\b", t):
-                    return "entailment"
-            elif dataset == "superglue_boolq":
-                if re.search(r"\btrue\b", t):
-                    return "true"
-                if re.search(r"\bfalse\b", t):
-                    return "false"
-                if re.search(r"\byes\b", t):
-                    return "true"
-                if re.search(r"\bno\b", t):
-                    return "false"
-            elif dataset == "financial_phrasebank":
-                if re.search(r"\bnegative\b", t):
-                    return "negative"
-                if re.search(r"\bneutral\b", t):
-                    return "neutral"
-                if re.search(r"\bpositive\b", t):
-                    return "positive"
-            elif dataset == "raft":
-                if re.search(r"\binadequate\b", t):
-                    return "inadequate"
-                if re.search(r"\badequate\b", t):
-                    return "adequate"
-            return None
-
-        if dataset_name in LABEL_MAPPINGS:
-            pred = parse_label(gen, dataset_name)
+        if dataset_name in LABEL_SETS:
+            pred = parse_classification_prediction(dataset_name, gen)
             return pred == exp if pred is not None else False
 
-        return exp == gen
+        return exp == gen.lower()
 
     def prepare_data(dataset_name, n):
         target_eval_samples = EVAL_SAMPLES.get(dataset_name, 150)
@@ -302,15 +303,7 @@ def execute_icl_pipeline():
                     idxs.append(pool_fp_to_idx[f])
             return eval_pool.select(idxs)
 
-        if dataset_name == "gsm8k":
-            ds_full_train = load_dataset("gsm8k", "main", split="train", trust_remote_code=True)
-            ds_full_eval = load_dataset("gsm8k", "main", split="test", trust_remote_code=True)
-            t_n, e_n = min(n, len(ds_full_train)), min(target_eval_samples, len(ds_full_eval))
-            train = ds_full_train.select(range(t_n))
-            eval_ds = select_random(ds_full_eval, e_n)
-            key = "answer"
-            eval_ds = ensure_no_overlap(train, eval_ds, ds_full_eval, dataset_name)
-        elif dataset_name == "superglue_rte":
+        if dataset_name == "superglue_rte":
             ds_full_train = load_dataset("super_glue", "rte", split="train", trust_remote_code=True)
             ds_full_eval = load_dataset("super_glue", "rte", split="validation", trust_remote_code=True)
             t_n, e_n = min(n, len(ds_full_train)), min(target_eval_samples, len(ds_full_eval))
@@ -335,15 +328,6 @@ def execute_icl_pipeline():
             eval_ds = stratified_select(eval_pool, "label", e_n)
             key = "label"
             eval_ds = ensure_no_overlap(train, eval_ds, eval_pool, dataset_name)
-        elif dataset_name == "dolly15k":
-            ds_full = load_dataset("databricks/databricks-dolly-15k", split="train", trust_remote_code=True)
-            t_n = min(n, int(len(ds_full) * 0.8))
-            e_n = min(target_eval_samples, len(ds_full) - t_n)
-            train = ds_full.select(range(t_n))
-            eval_pool = ds_full.select(range(t_n, len(ds_full)))
-            eval_ds = select_random(eval_pool, e_n)
-            key = "response"
-            eval_ds = ensure_no_overlap(train, eval_ds, eval_pool, dataset_name)
         else:
             ds_full = load_dataset("ought/raft", "ade_corpus_v2", split="train", trust_remote_code=True)
             t_n = min(n, int(len(ds_full) * 0.8))
@@ -356,12 +340,12 @@ def execute_icl_pipeline():
 
         return train, eval_ds, key
 
-    def build_fewshot_prefix(train_ds, dataset_name, key, use_cot):
+    def build_fewshot_prefix(train_ds, dataset_name, key):
         parts = []
         for ex in train_ds:
-            prompt = format_prompt(ex, dataset_name, use_cot)
+            prompt = format_prompt(ex, dataset_name)
             label = get_expected_label(dataset_name, ex[key])
-            parts.append(f"{prompt} {label}")
+            parts.append(f"{prompt}{label}")
         return "\n\n".join(parts)
 
     bnb_config = BitsAndBytesConfig(
@@ -371,10 +355,11 @@ def execute_icl_pipeline():
 
     pbar = tqdm(total=len(MODELS) * len(DATASETS) * len(N_SAMPLES), desc="Benchmark Progress")
 
-    load_checkpoint()
+    if USE_CHECKPOINTS:
+        load_checkpoint()
 
     for m_name, cfg in MODELS.items():
-        m_id, use_cot = cfg["id"], cfg["cot"]
+        m_id = cfg["id"]
 
         try:
             torch.cuda.empty_cache()
@@ -406,7 +391,7 @@ def execute_icl_pipeline():
 
         for d_name in DATASETS:
             for n in N_SAMPLES:
-                if (m_name, d_name, n) in completed:
+                if USE_CHECKPOINTS and (m_name, d_name, n) in completed:
                     print(f"[SKIP] Already completed Model: {m_name} | Dataset: {d_name} | Samples (N): {n}", flush=True)
                     pbar.update(1)
                     continue
@@ -414,16 +399,22 @@ def execute_icl_pipeline():
                 torch.cuda.reset_peak_memory_stats()
 
                 train_ds, ev_data, t_key = prepare_data(d_name, n)
-                fewshot_prefix = build_fewshot_prefix(train_ds, d_name, t_key, use_cot)
+                fewshot_prefix = build_fewshot_prefix(train_ds, d_name, t_key)
                 prefix = f"{fewshot_prefix}\n\n" if fewshot_prefix else ""
 
                 correct, ms, tokens, ev_list = 0, 0, 0, list(ev_data)
                 prompt_truncated = False
+                processed_tokens = 0
+                input_token_sum = 0
+                input_token_count = 0
+                max_input_tokens = 0
+                num_truncated = 0
+                total_prompts = 0
 
                 if len(ev_list) > 0:
                     for idx in range(0, len(ev_list), 16):
                         batch = ev_list[idx:idx + 16]
-                        p_txts = [prefix + format_prompt(i, d_name, use_cot) for i in batch]
+                        p_txts = [prefix + format_prompt(i, d_name) for i in batch]
                     
                         targets = [get_expected_label(d_name, i[t_key]) for i in batch]
                         lengths = tokenizer(
@@ -432,8 +423,16 @@ def execute_icl_pipeline():
                             truncation=False,
                             return_length=True
                         )["length"]
-                        if max(lengths, default=0) > tokenizer.model_max_length:
-                            prompt_truncated = True
+                        if lengths:
+                            max_input_tokens = max(max_input_tokens, max(lengths))
+                        for l in lengths:
+                            total_prompts += 1
+                            if l > ctx_len:
+                                num_truncated += 1
+                        prompt_truncated = num_truncated > 0
+
+                        input_token_sum += sum(lengths)
+                        input_token_count += len(lengths)
 
                         inputs = tokenizer(
                             p_txts,
@@ -449,15 +448,31 @@ def execute_icl_pipeline():
                         with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                             out = base_model.generate(
                                 **inputs,
-                                max_new_tokens=60 if use_cot else 25,
+                                max_new_tokens=8,
                                 pad_token_id=tokenizer.eos_token_id
                             )
 
                         torch.cuda.synchronize()
-                        ms += (time.time() - start) * 1000
-                        tokens += (out.shape[1] - inputs["input_ids"].shape[1]) * len(batch)
+                        batch_latency_ms = (time.time() - start) * 1000
+                        ms += batch_latency_ms
+                        batch_generated_tokens = 0
+                        eos_id = tokenizer.eos_token_id
+                        pad_id = tokenizer.pad_token_id
+                        for i in range(out.shape[0]):
+                            gen_tokens_i = get_generated_suffix(
+                                out[i], inputs["attention_mask"][i], eos_id, pad_id
+                            )
+                            batch_generated_tokens += int(gen_tokens_i.numel())
+                        tokens += batch_generated_tokens
+                        batch_input_tokens = int(inputs["attention_mask"].sum().item())
+                        processed_tokens += batch_input_tokens + batch_generated_tokens
 
-                        decs = tokenizer.batch_decode(out[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+                        decs = []
+                        for i in range(out.shape[0]):
+                            gen_tokens_i = get_generated_suffix(
+                                out[i], inputs["attention_mask"][i], eos_id, pad_id
+                            )
+                            decs.append(tokenizer.decode(gen_tokens_i, skip_special_tokens=True))
 
                         for exp, gen in zip(targets, decs):
                             if check_correctness(exp, gen, d_name):
@@ -467,33 +482,43 @@ def execute_icl_pipeline():
                 eval_len = max(1, len(ev_list))
 
                 total_latency_ms = ms / eval_len
-                total_throughput = tokens / (ms / 1000) if ms > 0 else 0
+                total_throughput = processed_tokens / (ms / 1000) if ms > 0 else 0
+                output_throughput = tokens / (ms / 1000) if ms > 0 else 0
                 avg_tpot = (ms / tokens) if tokens > 0 else 0
+                avg_input_tokens = (input_token_sum / input_token_count) if input_token_count > 0 else 0
+                truncation_rate = (num_truncated / total_prompts) if total_prompts > 0 else 0
 
                 results[d_name][m_name]["accuracy"].append(correct / eval_len)
                 results[d_name][m_name]["latency"].append(total_latency_ms)
                 results[d_name][m_name]["vram_pct"].append(vram)
-                results[d_name][m_name]["throughput"].append(total_throughput)
-                results[d_name][m_name]["train_time"].append(0.0)
+                results[d_name][m_name]["throughput_total"].append(total_throughput)
+                results[d_name][m_name]["throughput_output"].append(output_throughput)
                 results[d_name][m_name]["tpot"].append(avg_tpot)
+                results[d_name][m_name]["avg_input_tokens"].append(avg_input_tokens)
+                results[d_name][m_name]["max_input_tokens"].append(max_input_tokens)
+                results[d_name][m_name]["truncation_rate"].append(truncation_rate)
 
                 completed.add((m_name, d_name, n))
-                append_checkpoint({
-                    "timestamp": time.time(),
-                    "model": m_name,
-                    "model_id": m_id,
-                    "dataset": d_name,
-                    "n": n,
-                    "prompt_truncated": prompt_truncated,
-                    "metrics": {
-                        "accuracy": results[d_name][m_name]["accuracy"][-1],
-                        "latency": results[d_name][m_name]["latency"][-1],
-                        "vram_pct": results[d_name][m_name]["vram_pct"][-1],
-                        "throughput": results[d_name][m_name]["throughput"][-1],
-                        "train_time": results[d_name][m_name]["train_time"][-1],
-                        "tpot": results[d_name][m_name]["tpot"][-1]
-                    }
-                })
+                if USE_CHECKPOINTS:
+                    append_checkpoint({
+                        "timestamp": time.time(),
+                        "model": m_name,
+                        "model_id": m_id,
+                        "dataset": d_name,
+                        "n": n,
+                        "prompt_truncated": prompt_truncated,
+                        "metrics": {
+                            "accuracy": results[d_name][m_name]["accuracy"][-1],
+                            "latency": results[d_name][m_name]["latency"][-1],
+                            "vram_pct": results[d_name][m_name]["vram_pct"][-1],
+                            "throughput_total": results[d_name][m_name]["throughput_total"][-1],
+                            "throughput_output": results[d_name][m_name]["throughput_output"][-1],
+                            "tpot": results[d_name][m_name]["tpot"][-1],
+                            "avg_input_tokens": results[d_name][m_name]["avg_input_tokens"][-1],
+                            "max_input_tokens": results[d_name][m_name]["max_input_tokens"][-1],
+                            "truncation_rate": results[d_name][m_name]["truncation_rate"][-1],
+                        }
+                    })
 
                 torch.cuda.empty_cache()
                 pbar.update(1)
@@ -503,7 +528,7 @@ def execute_icl_pipeline():
 
     pbar.close()
 
-    metrics = ["accuracy", "latency", "vram_pct", "throughput", "train_time", "tpot"]
+    metrics = METRICS
     colors = {
         "Llama-3-8B-Instruct": "blue",
         "Qwen3-4B": "orange",
@@ -518,30 +543,31 @@ def execute_icl_pipeline():
     def sanitize_name(name):
         return "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in name)
 
-    for m_name in MODELS.keys():
-        model_tag = sanitize_name(m_name)
-        pdf_path = f"{output_dir}/ICL_Efficiency_Report_{model_tag}.pdf"
-        with PdfPages(pdf_path) as pdf:
-            for d_name in DATASETS:
-                fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-                fig.suptitle(f"ICL Efficiency Benchmarks: {m_name} | {d_name}")
-                for i, mtr in enumerate(metrics):
-                    ax = axes.flatten()[i]
-                    if len(results[d_name][m_name][mtr]) > 0:
-                        ax.plot(
-                            N_SAMPLES[:len(results[d_name][m_name][mtr])],
-                            results[d_name][m_name][mtr],
-                            marker='o',
-                            color=colors.get(m_name, "black"),
-                            label=m_name
-                        )
-                    ax.set_title(mtr.capitalize())
-                    ax.legend(fontsize='x-small', ncol=1)
-                plt.tight_layout()
-                pdf.savefig(fig)
-                plt.close(fig)
+    if USE_CHECKPOINTS:
+        for m_name in MODELS.keys():
+            model_tag = sanitize_name(m_name)
+            pdf_path = f"{output_dir}/ICL_Efficiency_Report_{model_tag}.pdf"
+            with PdfPages(pdf_path) as pdf:
+                for d_name in DATASETS:
+                    fig, axes = plt.subplots(3, 3, figsize=(18, 14))
+                    fig.suptitle(f"ICL Efficiency Benchmarks: {m_name} | {d_name}")
+                    for i, mtr in enumerate(metrics):
+                        ax = axes.flatten()[i]
+                        if len(results[d_name][m_name][mtr]) > 0:
+                            ax.plot(
+                                N_SAMPLES[:len(results[d_name][m_name][mtr])],
+                                results[d_name][m_name][mtr],
+                                marker='o',
+                                color=colors.get(m_name, "black"),
+                                label=m_name
+                            )
+                        ax.set_title(mtr.capitalize())
+                        ax.legend(fontsize='x-small', ncol=1)
+                    plt.tight_layout()
+                    pdf.savefig(fig)
+                    plt.close(fig)
 
-        print(f"[COMPLETE] ICL Efficiency Report saved to persistent volume: {pdf_path}", flush=True)
+            print(f"[COMPLETE] ICL Efficiency Report saved to persistent volume: {pdf_path}", flush=True)
 
 
 @app.local_entrypoint()

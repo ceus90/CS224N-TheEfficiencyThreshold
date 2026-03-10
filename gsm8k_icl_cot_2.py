@@ -1,8 +1,8 @@
 import modal
 
-app = modal.App("cs224n-lora-gsm8k-cot")
+app = modal.App("cs224n-icl-gsm8k-cot")
 
-lora_image = (
+icl_image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("git", "ninja-build", "build-essential")
     .pip_install(
@@ -11,9 +11,9 @@ lora_image = (
         "matplotlib",
         "datasets<4.0.0",
         "accelerate",
-        "peft",
         "bitsandbytes",
-        "tqdm"
+        "tqdm",
+        "vllm>=0.7.0"
     )
     .env({
         "NCCL_IGNORE_DISABLED_P2P": "1",
@@ -27,7 +27,7 @@ output_volume = modal.Volume.from_name("reft-reports", create_if_missing=True)
 
 
 @app.function(
-    image=lora_image,
+    image=icl_image,
     cpu=4.0,
     memory=65536,
     gpu="B200",
@@ -35,7 +35,7 @@ output_volume = modal.Volume.from_name("reft-reports", create_if_missing=True)
     secrets=[modal.Secret.from_name("hf-token")],
     volumes={"/workspace/reports": output_volume}
 )
-def execute_lora_pipeline():
+def execute_icl_pipeline():
     import os
     import re
     import time
@@ -45,15 +45,14 @@ def execute_lora_pipeline():
     import torch
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments, Trainer
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     from datasets import load_dataset
     from huggingface_hub import login
     from tqdm.auto import tqdm
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
     warnings.filterwarnings("ignore")
 
-    print("[SYSTEM] Environment initialized. Beginning LoRA pipeline...", flush=True)
+    print("[SYSTEM] Environment initialized. Beginning ICL pipeline...", flush=True)
 
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
@@ -62,14 +61,14 @@ def execute_lora_pipeline():
     login(token=hf_token)
 
     MODELS = {
-        "Llama-3-8B": {"id": "meta-llama/Meta-Llama-3-8B", "cot": False}, # todo
-        "Llama-3-8B-Instruct": {"id": "meta-llama/Meta-Llama-3-8B-Instruct", "cot": False}, # todo
-        "Qwen3-4B": {"id": "Qwen/Qwen3-4B", "cot": False}, # done
-        "Qwen3-4B-Instruct-2507": {"id": "Qwen/Qwen3-4B-Instruct-2507", "cot": False}, # current
-        "Qwen3-8B": {"id": "Qwen/Qwen3-8B", "cot": False}, # current
+        #"Llama-3-8B": {"id": "meta-llama/Meta-Llama-3-8B", "cot": False}, # 
+        # "Llama-3-8B-Instruct": {"id": "meta-llama/Meta-Llama-3-8B-Instruct", "cot": False}, # 
+        # "Qwen3-4B": {"id": "Qwen/Qwen3-4B", "cot": False}, # done
+        # "Qwen3-4B-Instruct-2507": {"id": "Qwen/Qwen3-4B-Instruct-2507", "cot": False}, # done
+        "Qwen3-8B": {"id": "Qwen/Qwen3-8B", "cot": False}, # 
         # "Qwen3-8B-Thinking": {"id": "Qwen/Qwen3-8B", "cot": True},
-        # "Qwen2.5-7B-Instruct": {"id": "Qwen/Qwen2.5-7B-Instruct", "cot": False},
-        "Gemma-2-9B": {"id": "google/gemma-2-9b", "cot": False}, # todo
+        ## "Qwen2.5-7B-Instruct": {"id": "Qwen/Qwen2.5-7B-Instruct", "cot": False},
+        "Gemma-2-9B": {"id": "google/gemma-2-9b", "cot": False}, # 
         # "Gemma-2-9B-IT": {"id": "google/gemma-2-9b-it", "cot": False}
     }
 
@@ -80,17 +79,19 @@ def execute_lora_pipeline():
         "gsm8k": 250
     }
 
+    METRICS = [
+        "accuracy", "latency", "vram_pct", "throughput_total", "throughput_output", "tpot",
+        "avg_input_tokens", "max_input_tokens", "truncation_rate"
+    ]
+
     results = {
-        ds: {m_name: {metric: [] for metric in [
-            "accuracy", "latency", "train_vram_pct", "eval_vram_pct",
-            "throughput_total", "throughput_output", "train_time", "tpot"
-        ]}
+        ds: {m_name: {metric: [] for metric in METRICS}
              for m_name in MODELS.keys()} for ds in DATASETS
     }
 
-    output_dir = "/workspace/reports/lora"
+    output_dir = "/workspace/reports/stratified"
     os.makedirs(output_dir, exist_ok=True)
-    checkpoint_path = f"{output_dir}/LoRA_GSM8K_COT_Checkpoint.jsonl"
+    checkpoint_path = f"{output_dir}/ICL_GSM8K_COT_Checkpoint_2.jsonl"
     completed = set()
     USE_CHECKPOINTS = True
 
@@ -112,12 +113,13 @@ def execute_lora_pipeline():
                     if m and d and isinstance(n, int) and m in results.get(d, {}):
                         results[d][m]["accuracy"].append(metrics.get("accuracy", 0.0))
                         results[d][m]["latency"].append(metrics.get("latency", 0.0))
-                        results[d][m]["train_vram_pct"].append(metrics.get("train_vram_pct", 0.0))
-                        results[d][m]["eval_vram_pct"].append(metrics.get("eval_vram_pct", 0.0))
+                        results[d][m]["vram_pct"].append(metrics.get("vram_pct", 0.0))
                         results[d][m]["throughput_total"].append(metrics.get("throughput_total", 0.0))
                         results[d][m]["throughput_output"].append(metrics.get("throughput_output", 0.0))
-                        results[d][m]["train_time"].append(metrics.get("train_time", 0.0))
                         results[d][m]["tpot"].append(metrics.get("tpot", 0.0))
+                        results[d][m]["avg_input_tokens"].append(metrics.get("avg_input_tokens", 0.0))
+                        results[d][m]["max_input_tokens"].append(metrics.get("max_input_tokens", 0.0))
+                        results[d][m]["truncation_rate"].append(metrics.get("truncation_rate", 0.0))
                         completed.add((m, d, n))
         except Exception as e:
             print(f"[WARN] Failed to load checkpoint: {e}", flush=True)
@@ -132,7 +134,6 @@ def execute_lora_pipeline():
     LABEL_MAPPINGS = {}
 
     def format_prompt(example, dataset_name, use_cot=False):
-        suffix = " Let's think step by step." if use_cot else ""
         if dataset_name == "gsm8k":
             return (
                 f"Question: {example['question']}\n\n"
@@ -142,7 +143,7 @@ def execute_lora_pipeline():
             )
         else:
             txt = list(example.values())[0]
-            return f"Input: {txt}{suffix}\nOutput:"
+            return f"Input: {txt}\nOutput:"
 
     def _normalize_num(s: str) -> str:
         return s.replace(",", "").replace("$", "").strip()
@@ -159,8 +160,9 @@ def execute_lora_pipeline():
             return ""
         return _normalize_num(match.group(0))
 
-    def get_generated_suffix_from_gen_block(gen_row, eos_id, pad_id):
-        gen_tokens_i = gen_row
+    def get_generated_suffix(out_row, attn_mask_row, eos_id, pad_id):
+        input_len_i = int(attn_mask_row.sum().item())
+        gen_tokens_i = out_row[input_len_i:]
         if eos_id is not None:
             eos_pos = (gen_tokens_i == eos_id).nonzero(as_tuple=True)[0]
             if len(eos_pos) > 0:
@@ -206,7 +208,7 @@ def execute_lora_pipeline():
                 label_to_indices.setdefault(label, []).append(i)
             total = sum(len(v) for v in label_to_indices.values())
             if total == 0:
-                return ds.select(list(range(k)))
+                return select_random(ds, k)
             k = min(k, total)
             allocations = {}
             for label, idxs in label_to_indices.items():
@@ -244,6 +246,7 @@ def execute_lora_pipeline():
                 filtered_fps.add(f)
             if len(filtered) == len(eval_list):
                 return eval_ds
+            # Refill from eval_pool with non-overlapping examples
             pool_list = list(eval_pool)
             pool_fp_to_idx = {}
             for i, ex in enumerate(pool_list):
@@ -278,55 +281,13 @@ def execute_lora_pipeline():
 
         return train, eval_ds, key
 
-    class SupervisedDataset(torch.utils.data.Dataset):
-        def __init__(self, prompts, targets, tokenizer, max_len):
-            self.items = []
-            for p, t in zip(prompts, targets):
-                full = f"{p} {t}"
-                p_ids = tokenizer(
-                    p,
-                    truncation=True,
-                    max_length=max_len,
-                    padding=False,
-                    add_special_tokens=True
-                )["input_ids"]
-                full_enc = tokenizer(
-                    full,
-                    truncation=True,
-                    max_length=max_len,
-                    padding=False,
-                    add_special_tokens=True
-                )
-                input_ids = full_enc["input_ids"]
-                attn = full_enc["attention_mask"]
-                prompt_len = min(len(p_ids), len(input_ids))
-                labels = [-100] * prompt_len + input_ids[prompt_len:]
-                labels = labels[:len(input_ids)]
-                self.items.append({
-                    "input_ids": torch.tensor(input_ids, dtype=torch.long),
-                    "attention_mask": torch.tensor(attn, dtype=torch.long),
-                    "labels": torch.tensor(labels, dtype=torch.long)
-                })
-
-        def __len__(self):
-            return len(self.items)
-
-        def __getitem__(self, idx):
-            return self.items[idx]
-
-    def collate_fn(batch, pad_token_id):
-        input_ids = [b["input_ids"] for b in batch]
-        attention_mask = [b["attention_mask"] for b in batch]
-        labels = [b["labels"] for b in batch]
-        max_len = max(x.size(0) for x in input_ids)
-
-        def pad(seq, pad_val):
-            return torch.nn.functional.pad(seq, (0, max_len - seq.size(0)), value=pad_val)
-
-        input_ids = torch.stack([pad(x, pad_token_id) for x in input_ids], dim=0)
-        attention_mask = torch.stack([pad(x, 0) for x in attention_mask], dim=0)
-        labels = torch.stack([pad(x, -100) for x in labels], dim=0)
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
+    def build_fewshot_prefix(train_ds, dataset_name, key, use_cot):
+        parts = []
+        for ex in train_ds:
+            prompt = format_prompt(ex, dataset_name, use_cot)
+            label = get_expected_label(dataset_name, ex[key])
+            parts.append(f"{prompt} {label}")
+        return "\n\n".join(parts)
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True, bnb_4bit_use_double_quant=True,
@@ -341,6 +302,34 @@ def execute_lora_pipeline():
     for m_name, cfg in MODELS.items():
         m_id, use_cot = cfg["id"], True
 
+        try:
+            torch.cuda.empty_cache()
+
+            tokenizer = AutoTokenizer.from_pretrained(m_id, token=hf_token, model_max_length=2048)
+            tokenizer.padding_side, tokenizer.pad_token = "left", tokenizer.eos_token
+            tokenizer.truncation_side = "left"
+
+            is_specialized = any(x in m_id.lower() for x in ["fp8", "dms"])
+            load_cfg = None if is_specialized else bnb_config
+
+            base_model = AutoModelForCausalLM.from_pretrained(
+                m_id, quantization_config=load_cfg, device_map="auto",
+                attn_implementation="sdpa", token=hf_token,
+                dtype=torch.bfloat16
+            )
+
+        except Exception as e:
+            print(f"[ERROR] Failed to load model {m_id}: {e}", flush=True)
+            pbar.update(len(DATASETS) * len(N_SAMPLES))
+            continue
+
+        base_model.eval()
+        model_ctx_len = getattr(base_model.config, "max_position_embeddings", None)
+        if model_ctx_len is None:
+            model_ctx_len = tokenizer.model_max_length
+        ctx_len = min(tokenizer.model_max_length, model_ctx_len)
+        tokenizer.model_max_length = ctx_len
+
         for d_name in DATASETS:
             for n in N_SAMPLES:
                 if USE_CHECKPOINTS and (m_name, d_name, n) in completed:
@@ -350,86 +339,24 @@ def execute_lora_pipeline():
                 print(f"[BENCHMARK] Active Model: {m_name} | Dataset: {d_name} | Samples (N): {n}", flush=True)
                 torch.cuda.reset_peak_memory_stats()
 
-                try:
-                    torch.cuda.empty_cache()
-
-                    tokenizer = AutoTokenizer.from_pretrained(m_id, token=hf_token, model_max_length=2048)
-                    tokenizer.padding_side, tokenizer.pad_token = "left", tokenizer.eos_token
-                    tokenizer.truncation_side = "left"
-
-                    is_specialized = any(x in m_id.lower() for x in ["fp8", "dms"])
-                    load_cfg = None if is_specialized else bnb_config
-
-                    base_model = AutoModelForCausalLM.from_pretrained(
-                        m_id, quantization_config=load_cfg, device_map="auto",
-                        attn_implementation="sdpa", token=hf_token,
-                        dtype=torch.bfloat16
-                    )
-                except Exception as e:
-                    print(f"[ERROR] Failed to load model {m_id}: {e}", flush=True)
-                    pbar.update(1)
-                    continue
-
-                if not is_specialized:
-                    base_model = prepare_model_for_kbit_training(base_model, use_gradient_checkpointing=False)
-
-                lora_config = LoraConfig(
-                    r=8,
-                    lora_alpha=16,
-                    lora_dropout=0.05,
-                    target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-                    bias="none",
-                    task_type="CAUSAL_LM"
-                )
-                lora_model = get_peft_model(base_model, lora_config)
-                lora_model.train()
-
-                model_ctx_len = getattr(lora_model.config, "max_position_embeddings", None)
-                if model_ctx_len is None:
-                    model_ctx_len = tokenizer.model_max_length
-                ctx_len = min(tokenizer.model_max_length, model_ctx_len)
-                tokenizer.model_max_length = ctx_len
-
                 train_ds, ev_data, t_key = prepare_data(d_name, n)
-                train_prompts = [format_prompt(i, d_name, use_cot) for i in train_ds]
-                train_targets = [get_expected_label(d_name, i[t_key]) for i in train_ds]
-                train_dataset = SupervisedDataset(train_prompts, train_targets, tokenizer, ctx_len)
+                fewshot_prefix = build_fewshot_prefix(train_ds, d_name, t_key, use_cot)
+                prefix = f"{fewshot_prefix}\n\n" if fewshot_prefix else ""
 
-                trainer = Trainer(
-                    model=lora_model,
-                    args=TrainingArguments(
-                        output_dir="./tmp",
-                        max_steps=100,
-                        per_device_train_batch_size=16,
-                        learning_rate=2e-4,
-                        bf16=True,
-                        tf32=True,
-                        report_to="none",
-                        gradient_checkpointing=False
-                    ),
-                    train_dataset=train_dataset,
-                    data_collator=lambda b: collate_fn(b, tokenizer.pad_token_id)
-                )
-
-                torch.cuda.reset_peak_memory_stats()
-                train_start_time = time.time()
-                trainer.train()
-                train_duration = time.time() - train_start_time
-                train_vram_pct = (
-                    torch.cuda.max_memory_allocated() /
-                    torch.cuda.get_device_properties(0).total_memory
-                ) * 100
-
-                lora_model.eval()
-                torch.cuda.reset_peak_memory_stats()
                 correct, ms, tokens, ev_list = 0, 0, 0, list(ev_data)
-                processed_tokens = 0
                 prompt_truncated = False
+                processed_tokens = 0
+                input_token_sum = 0
+                input_token_count = 0
+                max_input_tokens = 0
+                num_truncated = 0
+                total_prompts = 0
 
                 if len(ev_list) > 0:
                     for idx in range(0, len(ev_list), 16):
                         batch = ev_list[idx:idx + 16]
-                        p_txts = [format_prompt(i, d_name, use_cot) for i in batch]
+                        p_txts = [prefix + format_prompt(i, d_name, use_cot) for i in batch]
+                    
                         targets = [get_expected_label(d_name, i[t_key]) for i in batch]
                         lengths = tokenizer(
                             p_txts,
@@ -437,8 +364,16 @@ def execute_lora_pipeline():
                             truncation=False,
                             return_length=True
                         )["length"]
-                        if max(lengths, default=0) > tokenizer.model_max_length:
-                            prompt_truncated = True
+                        if lengths:
+                            max_input_tokens = max(max_input_tokens, max(lengths))
+                        for l in lengths:
+                            total_prompts += 1
+                            if l > ctx_len:
+                                num_truncated += 1
+                        prompt_truncated = num_truncated > 0
+
+                        input_token_sum += sum(lengths)
+                        input_token_count += len(lengths)
 
                         inputs = tokenizer(
                             p_txts,
@@ -452,7 +387,7 @@ def execute_lora_pipeline():
                         start = time.time()
 
                         with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                            out = lora_model.generate(
+                            out = base_model.generate(
                                 **inputs,
                                 max_new_tokens=256,
                                 pad_token_id=tokenizer.eos_token_id
@@ -460,14 +395,12 @@ def execute_lora_pipeline():
 
                         torch.cuda.synchronize()
                         ms += (time.time() - start) * 1000
-                        gen_start = inputs["input_ids"].shape[1]
-                        gen_block = out[:, gen_start:]
                         batch_generated_tokens = 0
                         eos_id = tokenizer.eos_token_id
                         pad_id = tokenizer.pad_token_id
-                        for i in range(gen_block.shape[0]):
-                            gen_tokens_i = get_generated_suffix_from_gen_block(
-                                gen_block[i], eos_id, pad_id
+                        for i in range(out.shape[0]):
+                            gen_tokens_i = get_generated_suffix(
+                                out[i], inputs["attention_mask"][i], eos_id, pad_id
                             )
                             batch_generated_tokens += int(gen_tokens_i.numel())
                         tokens += batch_generated_tokens
@@ -475,9 +408,9 @@ def execute_lora_pipeline():
                         processed_tokens += batch_input_tokens + batch_generated_tokens
 
                         decs = []
-                        for i in range(gen_block.shape[0]):
-                            gen_tokens_i = get_generated_suffix_from_gen_block(
-                                gen_block[i], eos_id, pad_id
+                        for i in range(out.shape[0]):
+                            gen_tokens_i = get_generated_suffix(
+                                out[i], inputs["attention_mask"][i], eos_id, pad_id
                             )
                             decs.append(tokenizer.decode(gen_tokens_i, skip_special_tokens=True))
 
@@ -485,30 +418,25 @@ def execute_lora_pipeline():
                             if check_correctness(exp, gen, d_name):
                                 correct += 1
 
-                eval_vram_pct = (
-                    torch.cuda.max_memory_allocated() /
-                    torch.cuda.get_device_properties(0).total_memory
-                ) * 100
+                vram = (torch.cuda.max_memory_allocated() / torch.cuda.get_device_properties(0).total_memory) * 100
                 eval_len = max(1, len(ev_list))
 
                 total_latency_ms = ms / eval_len
                 total_throughput = processed_tokens / (ms / 1000) if ms > 0 else 0
                 output_throughput = tokens / (ms / 1000) if ms > 0 else 0
                 avg_tpot = (ms / tokens) if tokens > 0 else 0
+                avg_input_tokens = (input_token_sum / input_token_count) if input_token_count > 0 else 0
+                truncation_rate = (num_truncated / total_prompts) if total_prompts > 0 else 0
 
                 results[d_name][m_name]["accuracy"].append(correct / eval_len)
                 results[d_name][m_name]["latency"].append(total_latency_ms)
-                results[d_name][m_name]["train_vram_pct"].append(train_vram_pct)
-                results[d_name][m_name]["eval_vram_pct"].append(eval_vram_pct)
+                results[d_name][m_name]["vram_pct"].append(vram)
                 results[d_name][m_name]["throughput_total"].append(total_throughput)
                 results[d_name][m_name]["throughput_output"].append(output_throughput)
-                results[d_name][m_name]["train_time"].append(train_duration)
                 results[d_name][m_name]["tpot"].append(avg_tpot)
-
-                print(
-                    f"[SCORE] {m_name} | {d_name} | N={n} | accuracy={correct}/{eval_len}={correct / eval_len:.4f}",
-                    flush=True
-                )
+                results[d_name][m_name]["avg_input_tokens"].append(avg_input_tokens)
+                results[d_name][m_name]["max_input_tokens"].append(max_input_tokens)
+                results[d_name][m_name]["truncation_rate"].append(truncation_rate)
 
                 completed.add((m_name, d_name, n))
                 if USE_CHECKPOINTS:
@@ -522,23 +450,25 @@ def execute_lora_pipeline():
                         "metrics": {
                             "accuracy": results[d_name][m_name]["accuracy"][-1],
                             "latency": results[d_name][m_name]["latency"][-1],
-                            "train_vram_pct": results[d_name][m_name]["train_vram_pct"][-1],
-                            "eval_vram_pct": results[d_name][m_name]["eval_vram_pct"][-1],
+                            "vram_pct": results[d_name][m_name]["vram_pct"][-1],
                             "throughput_total": results[d_name][m_name]["throughput_total"][-1],
                             "throughput_output": results[d_name][m_name]["throughput_output"][-1],
-                            "train_time": results[d_name][m_name]["train_time"][-1],
-                            "tpot": results[d_name][m_name]["tpot"][-1]
+                            "tpot": results[d_name][m_name]["tpot"][-1],
+                            "avg_input_tokens": results[d_name][m_name]["avg_input_tokens"][-1],
+                            "max_input_tokens": results[d_name][m_name]["max_input_tokens"][-1],
+                            "truncation_rate": results[d_name][m_name]["truncation_rate"][-1]
                         }
                     })
 
-                lora_model = None
-                base_model = None
                 torch.cuda.empty_cache()
                 pbar.update(1)
 
+        base_model = None
+        torch.cuda.empty_cache()
+
     pbar.close()
 
-    metrics = ["accuracy", "latency", "train_vram_pct", "eval_vram_pct", "throughput_total", "throughput_output", "train_time", "tpot"]
+    metrics = METRICS
     colors = {
         "Llama-3-8B-Instruct": "blue",
         "Qwen3-4B": "orange",
@@ -553,37 +483,36 @@ def execute_lora_pipeline():
     def sanitize_name(name):
         return "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in name)
 
-    for m_name in MODELS.keys():
-        model_tag = sanitize_name(m_name)
-        pdf_path = f"{output_dir}/LoRA_GSM8K_COT_Report_{model_tag}.pdf"
-        with PdfPages(pdf_path) as pdf:
-            for d_name in DATASETS:
-                fig, axes = plt.subplots(3, 3, figsize=(18, 10))
-                fig.suptitle(f"LoRA GSM8K CoT: {m_name} | {d_name}")
-                for i, mtr in enumerate(metrics):
-                    ax = axes.flatten()[i]
-                    y = results[d_name][m_name][mtr]
-                    if len(y) > 0:
-                        k = min(len(N_SAMPLES), len(y))
-                        ax.plot(
-                            N_SAMPLES[:k],
-                            y[:k],
-                            marker='o',
-                            color=colors.get(m_name, "black"),
-                            label=m_name
-                        )
-                    ax.set_title(mtr.capitalize())
-                    ax.legend(fontsize='x-small', ncol=1)
-                for ax in axes.flatten()[len(metrics):]:
-                    ax.axis("off")
-                plt.tight_layout()
-                pdf.savefig(fig)
-                plt.close(fig)
+    if USE_CHECKPOINTS:
+        for m_name in MODELS.keys():
+            model_tag = sanitize_name(m_name)
+            pdf_path = f"{output_dir}/ICL_GSM8K_COT_Report_{model_tag}_2.pdf"
+            with PdfPages(pdf_path) as pdf:
+                for d_name in DATASETS:
+                    fig, axes = plt.subplots(3, 3, figsize=(18, 10))
+                    fig.suptitle(f"ICL GSM8K CoT: {m_name} | {d_name}")
+                    for i, mtr in enumerate(metrics):
+                        ax = axes.flatten()[i]
+                        y = results[d_name][m_name][mtr]
+                        if len(y) > 0:
+                            k = min(len(N_SAMPLES), len(y))
+                            ax.plot(
+                                N_SAMPLES[:k],
+                                y[:k],
+                                marker='o',
+                                color=colors.get(m_name, "black"),
+                                label=m_name
+                            )
+                        ax.set_title(mtr.capitalize())
+                        ax.legend(fontsize='x-small', ncol=1)
+                    plt.tight_layout()
+                    pdf.savefig(fig)
+                    plt.close(fig)
 
-        print(f"[COMPLETE] LoRA Efficiency Report saved to persistent volume: {pdf_path}", flush=True)
+            print(f"[COMPLETE] ICL Efficiency Report saved to persistent volume: {pdf_path}", flush=True)
 
 
 @app.local_entrypoint()
 def main():
-    print("Initiating cloud-based LoRA evaluation...", flush=True)
-    execute_lora_pipeline.remote()
+    print("Initiating cloud-based ICL evaluation...", flush=True)
+    execute_icl_pipeline.remote()

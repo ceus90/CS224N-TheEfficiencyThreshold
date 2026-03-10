@@ -4,10 +4,12 @@ import os
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-BASE_DIR = "/Users/abilopez/Documents/StanfordClasses/Win26/224N/final_results"
-ICL_PATH = os.path.join(BASE_DIR, "ICL_results.jsonl")
-LORA_PATH = os.path.join(BASE_DIR, "LoRA_results.jsonl")
-OUT_PATH = os.path.join(BASE_DIR, "results_summary.pdf")
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+BASE_DIR = os.path.join(REPO_ROOT, "final_results")
+ICL_PATH = os.path.join(BASE_DIR, "icl_results.jsonl")
+LORA_PATH = os.path.join(BASE_DIR, "lora_results.jsonl")
+OUT_DIR = os.path.join(BASE_DIR, "pdfs")
+OUT_PATH = os.path.join(OUT_DIR, "results_summary.pdf")
 N_ORDER = [16, 32, 64, 128, 256]
 
 
@@ -62,6 +64,7 @@ def plot_small_multiples(pdf, title, y_label, icl_mean, lora_mean, datasets, met
             ax.legend(fontsize='x-small')
         ax.set_title(d)
         ax.set_xlabel("N")
+        ax.set_xticks(N_ORDER)
         if i == 0:
             ax.set_ylabel(y_label)
     fig.suptitle(title)
@@ -83,6 +86,7 @@ def plot_mean_delta(pdf, title, y_label, icl_mean, lora_mean, datasets):
     ax.plot(all_ns, mean_delta, marker='o', color='black')
     ax.axhline(0, color='gray', linewidth=1, linestyle='--')
     ax.set_xlabel("N")
+    ax.set_xticks(N_ORDER)
     ax.set_ylabel(y_label)
     ax.set_title(title)
     plt.tight_layout()
@@ -108,6 +112,7 @@ def plot_mean_metric(pdf, title, y_label, icl_mean, lora_mean, datasets):
     ax.plot(all_ns, icl_avg, marker='o', label="ICL")
     ax.plot(all_ns, lora_avg, marker='^', label="LoRA")
     ax.set_xlabel("N")
+    ax.set_xticks(N_ORDER)
     ax.set_ylabel(y_label)
     ax.set_title(title)
     ax.legend(fontsize='small')
@@ -117,6 +122,7 @@ def plot_mean_metric(pdf, title, y_label, icl_mean, lora_mean, datasets):
 
 
 if __name__ == "__main__":
+    os.makedirs(OUT_DIR, exist_ok=True)
     icl_records = load_records(ICL_PATH)
     lora_records = load_records(LORA_PATH)
 
