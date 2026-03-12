@@ -12,6 +12,7 @@ Outputs:
   4. Per-class accuracy heatmaps (multi-class tasks)
   5. Unknown-rate analysis
   6. Full-dataset vs. sampled accuracy comparison
+  7. Macro-F1 convergence (per model) and macro-F1 convergence (avg of 3 models, 4 graphs)
 """
 
 import json
@@ -64,10 +65,42 @@ TASK_PATHS = {
 }
 
 PALETTE = {
-    "llama_3_8b": "#E74C3C",
-    "qwen_3_4b": "#3498DB",
-    "qwen_3_8b": "#2ECC71",
+    "llama_3_8b": "#4C72B0",
+    "qwen_3_4b": "#DD8452",
+    "qwen_3_8b": "#55A868",
 }
+
+# ── RAFT-specific constants ────────────────────────────────────────────────────
+# Each train_results.json has exactly 50 labelled examples, so sample sizes must be ≤ 50.
+RAFT_SAMPLE_SIZES = [5, 10, 16, 25, 32, 40]
+
+RAFT_TASKS = [
+    "ade_corpus_v2",
+    "banking_77",
+    "neurips_impact_statement_risks",
+    "one_stop_english",
+    "overruling",
+    "semiconductor_org_types",
+    "tai_safety_research",
+    "terms_of_service",
+    "tweet_eval_hate",
+    "twitter_complaints",
+]
+
+RAFT_TASK_DISPLAY = {
+    "ade_corpus_v2":                  "ADE Corpus v2",
+    "banking_77":                     "Banking-77",
+    "neurips_impact_statement_risks": "NeurIPS Impact",
+    "one_stop_english":               "One Stop English",
+    "overruling":                     "Overruling",
+    "semiconductor_org_types":        "Semiconductor Orgs",
+    "tai_safety_research":            "TAI Safety",
+    "terms_of_service":               "Terms of Service",
+    "tweet_eval_hate":                "Tweet Eval Hate",
+    "twitter_complaints":             "Twitter Complaints",
+}
+
+RAFT_DIR = BASE_DIR / "raft"
 
 
 # ── Loading Utilities ─────────────────────────────────────────────────────────
@@ -127,6 +160,25 @@ def discover_checkpoints() -> dict[str, dict[str, pd.DataFrame]]:
                         continue
                     data[task][model_name] = df
                     break
+    return data
+
+
+def load_raft_data() -> dict[str, dict[str, pd.DataFrame]]:
+    """Return {task: {model_key: DataFrame}} from per-subtask train_results.json files."""
+    data: dict[str, dict[str, pd.DataFrame]] = {}
+    for task in RAFT_TASKS:
+        data[task] = {}
+        for model_key in MODEL_DISPLAY:
+            path = RAFT_DIR / model_key / task / "train_results.json"
+            if not path.exists():
+                continue
+            with open(path) as f:
+                records = json.load(f)
+            df = pd.DataFrame(records)
+            # Normalise column names to match the rest of the script
+            if "ground_truth" not in df.columns and "label" in df.columns:
+                df = df.rename(columns={"label": "ground_truth"})
+            data[task][model_key] = df
     return data
 
 
@@ -298,7 +350,7 @@ def run_analysis():
 
     # ── 2. Convergence Curves ─────────────────────────────────────────────
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    fig.suptitle("Accuracy Convergence: Sample Size → Full Dataset", fontsize=15, fontweight="bold")
+    fig.suptitle("Accuracy Convergence: Sample Size to Full Dataset", fontsize=15, fontweight="bold")
 
     for ax, task in zip(axes.flat, TASK_PATHS.keys()):
         if task not in data:
@@ -497,7 +549,7 @@ def run_analysis():
 
     # ── 8. Macro-F1 Convergence ───────────────────────────────────────────
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    fig.suptitle("Macro-F1 Convergence: Sample Size → Full Dataset", fontsize=15, fontweight="bold")
+    fig.suptitle("Macro-F1 Convergence: Sample Size to Full Dataset", fontsize=15, fontweight="bold")
 
     for ax, task in zip(axes.flat, TASK_PATHS.keys()):
         if task not in data:
@@ -525,7 +577,43 @@ def run_analysis():
     plt.close(fig)
     print(f"Saved macro-F1 convergence → {OUTPUT_DIR / 'macro_f1_convergence.png'}")
 
-    # ── 9. Side-by-Side Full Accuracy Comparison ──────────────────────────
+    # ── 9. Macro-F1 Convergence (Average of Three Models) ──────────────────
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle("Macro-F1 Convergence (Avg of 3 Models): Sample Size to Full Dataset",
+                 fontsize=15, fontweight="bold")
+
+    for ax, task in zip(axes.flat, TASK_PATHS.keys()):
+        if task not in data:
+            ax.set_visible(False)
+            continue
+        # Sample sizes: average macro_f1 across models for each n
+        sub = summary[(summary["task"] == task) & (summary["n"] != "full")]
+        if sub.empty:
+            continue
+        agg = sub.groupby("n", sort=True).agg(macro_f1=("macro_f1", "mean")).reset_index()
+        ns = agg["n"].astype(int).values
+        f1_means = agg["macro_f1"].values
+        # Full-dataset average macro-F1 across models
+        full_sub = summary[(summary["task"] == task) & (summary["n"] == "full")]
+        full_avg_f1 = full_sub["macro_f1"].mean() if not full_sub.empty else np.nan
+
+        ax.plot(ns, f1_means, "o-", color="#2E86AB", linewidth=2, label="Avg macro-F1")
+        if not np.isnan(full_avg_f1):
+            ax.axhline(full_avg_f1, color="#2E86AB", linestyle="--", alpha=0.5, linewidth=1,
+                       label=f"Full avg = {full_avg_f1:.3f}")
+
+        ax.set_title(TASK_DISPLAY.get(task, task), fontsize=13)
+        ax.set_xlabel("Sample Size (n)")
+        ax.set_ylabel("Macro-F1 (avg)")
+        ax.set_xticks(SAMPLE_SIZES)
+        ax.legend(fontsize=9)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.savefig(OUTPUT_DIR / "macro_f1_convergence_avg.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved macro-F1 convergence (avg) → {OUTPUT_DIR / 'macro_f1_convergence_avg.png'}")
+
+    # ── 10. Side-by-Side Full Accuracy Comparison ──────────────────────────
     full_rows = summary[summary["n"] == "full"][["task", "model", "accuracy"]].copy()
     fig, ax = plt.subplots(figsize=(10, 5))
     pivot = full_rows.pivot(index="task", columns="model", values="accuracy")
@@ -547,5 +635,213 @@ def run_analysis():
     return summary, data, boot_cache
 
 
+def run_raft_analysis() -> pd.DataFrame:
+    """Bootstrap sampling analysis for RAFT train_results.json (50 examples / subtask)."""
+    print("\n" + "=" * 90)
+    print("RAFT TRAIN-SPLIT SAMPLING ANALYSIS")
+    print("=" * 90)
+
+    raft_data = load_raft_data()
+    found = {t: list(m.keys()) for t, m in raft_data.items() if m}
+    print(f"Loaded {sum(len(v) for v in found.values())} files across {len(found)} tasks")
+    for task, models in found.items():
+        print(f"  {RAFT_TASK_DISPLAY.get(task, task)}: {[MODEL_DISPLAY.get(m, m) for m in models]}")
+
+    rng = np.random.default_rng(SEED)
+
+    # ── 1. Build summary table ─────────────────────────────────────────────
+    rows = []
+    boot_cache: dict[tuple, np.ndarray] = {}
+
+    for task in RAFT_TASKS:
+        models = raft_data.get(task, {})
+        for model_key, df in models.items():
+            full_acc = accuracy(df)
+            full_unk = unknown_rate(df)
+            full_f1  = macro_f1(df)
+            n_total  = len(df)
+
+            rows.append({
+                "task": task, "model": model_key, "n": "full",
+                "n_total": n_total, "accuracy": full_acc, "accuracy_std": np.nan,
+                "ci_lo": np.nan, "ci_hi": np.nan,
+                "unknown_rate": full_unk, "macro_f1": full_f1,
+            })
+
+            for sz in RAFT_SAMPLE_SIZES:
+                if sz > n_total:
+                    continue
+                accs = bootstrap_accuracy(df, sz, N_BOOTSTRAP, rng)
+                f1s  = bootstrap_metric(df, macro_f1, sz, N_BOOTSTRAP, rng)
+                boot_cache[(task, model_key, sz)] = accs
+                lo, hi = np.percentile(accs, [2.5, 97.5])
+                rows.append({
+                    "task": task, "model": model_key, "n": sz,
+                    "n_total": n_total, "accuracy": accs.mean(), "accuracy_std": accs.std(),
+                    "ci_lo": lo, "ci_hi": hi,
+                    "unknown_rate": full_unk, "macro_f1": f1s.mean(),
+                })
+
+    summary = pd.DataFrame(rows)
+
+    print("\nRAFT sampling summary (accuracy mean ± std):")
+    for task in RAFT_TASKS:
+        sub = summary[summary["task"] == task]
+        if sub.empty:
+            continue
+        print(f"\n  {RAFT_TASK_DISPLAY.get(task, task)}")
+        for model_key in sub["model"].unique():
+            msub = sub[sub["model"] == model_key]
+            full_row = msub[msub["n"] == "full"].iloc[0]
+            print(f"    {MODEL_DISPLAY.get(model_key, model_key):12s}  "
+                  f"full acc={full_row['accuracy']:.3f}  macro-F1={full_row['macro_f1']:.3f}")
+            for _, r in msub[msub["n"] != "full"].sort_values("n").iterrows():
+                print(f"      n={int(r['n']):>2d}  acc={r['accuracy']:.3f} ± {r['accuracy_std']:.3f}  "
+                      f"95% CI [{r['ci_lo']:.3f}, {r['ci_hi']:.3f}]")
+
+    summary.to_csv(OUTPUT_DIR / "raft_sampling_summary.csv", index=False)
+    print(f"\nSaved → {OUTPUT_DIR / 'raft_sampling_summary.csv'}")
+
+    # ── 2. Convergence curves (2 rows × 5 cols, one panel per RAFT subtask) ─
+    fig, axes = plt.subplots(2, 5, figsize=(22, 9), sharey=False)
+    fig.suptitle("RAFT Train-Split: Accuracy Convergence by Sample Size (n=50 total)",
+                 fontsize=15, fontweight="bold")
+
+    for ax, task in zip(axes.flat, RAFT_TASKS):
+        models = raft_data.get(task, {})
+        for model_key, df in models.items():
+            full_acc = accuracy(df)
+            sub = summary[(summary["task"] == task) & (summary["model"] == model_key) & (summary["n"] != "full")]
+            if sub.empty:
+                continue
+            ns    = sub["n"].astype(int).values
+            means = sub["accuracy"].values
+            ci_lo = sub["ci_lo"].values
+            ci_hi = sub["ci_hi"].values
+            color = PALETTE.get(model_key, "#999999")
+            ax.plot(ns, means, "o-", label=MODEL_DISPLAY.get(model_key, model_key),
+                    color=color, linewidth=2)
+            ax.fill_between(ns, ci_lo, ci_hi, alpha=0.15, color=color)
+            ax.axhline(full_acc, color=color, linestyle="--", alpha=0.45, linewidth=1)
+
+        ax.set_title(RAFT_TASK_DISPLAY.get(task, task), fontsize=10, fontweight="bold")
+        ax.set_xlabel("Sample size (n)", fontsize=8)
+        ax.set_ylabel("Accuracy", fontsize=8)
+        ax.set_xticks(RAFT_SAMPLE_SIZES)
+        ax.tick_params(labelsize=7)
+        ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0))
+        ax.legend(fontsize=7)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.94])
+    fig.savefig(OUTPUT_DIR / "raft_convergence_curves.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved → {OUTPUT_DIR / 'raft_convergence_curves.png'}")
+
+    # ── 3. Bootstrap violin plots per subtask ──────────────────────────────
+    for task in RAFT_TASKS:
+        models_in_task = list(raft_data.get(task, {}).keys())
+        if not models_in_task:
+            continue
+        fig, axes = plt.subplots(1, len(models_in_task),
+                                 figsize=(5 * len(models_in_task), 5), squeeze=False)
+        fig.suptitle(f"Bootstrap Accuracy Distributions — {RAFT_TASK_DISPLAY.get(task, task)} (RAFT)",
+                     fontsize=13, fontweight="bold")
+
+        for ax, model_key in zip(axes[0], models_in_task):
+            plot_data, labels = [], []
+            for sz in RAFT_SAMPLE_SIZES:
+                key = (task, model_key, sz)
+                if key in boot_cache:
+                    plot_data.append(boot_cache[key])
+                    labels.append(str(sz))
+            if not plot_data:
+                ax.set_visible(False)
+                continue
+            parts = ax.violinplot(plot_data, positions=range(len(labels)),
+                                  showmeans=True, showmedians=True)
+            for pc in parts["bodies"]:
+                pc.set_facecolor(PALETTE.get(model_key, "#999999"))
+                pc.set_alpha(0.6)
+            full_acc = accuracy(raft_data[task][model_key])
+            ax.axhline(full_acc, color="black", linestyle="--", alpha=0.6,
+                       label=f"Full (n=50) = {full_acc:.3f}")
+            ax.set_xticks(range(len(labels)))
+            ax.set_xticklabels([f"n={l}" for l in labels])
+            ax.set_ylabel("Accuracy")
+            ax.set_title(MODEL_DISPLAY.get(model_key, model_key), fontsize=11)
+            ax.legend(fontsize=8)
+            ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0))
+
+        plt.tight_layout(rect=[0, 0, 1, 0.92])
+        fig.savefig(OUTPUT_DIR / f"raft_bootstrap_violins_{task}.png", dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+    print(f"Saved bootstrap violin plots → {OUTPUT_DIR}/raft_bootstrap_violins_*.png")
+
+    # ── 4. Std-dev decay across all RAFT subtasks ──────────────────────────
+    fig, ax = plt.subplots(figsize=(11, 6))
+    fig.suptitle("RAFT: Bootstrap Std-Dev Decay with Sample Size", fontsize=13, fontweight="bold")
+
+    for task in RAFT_TASKS:
+        for model_key in raft_data.get(task, {}):
+            sub = summary[(summary["task"] == task) & (summary["model"] == model_key) & (summary["n"] != "full")]
+            if sub.empty:
+                continue
+            ns   = sub["n"].astype(int).values
+            stds = sub["accuracy_std"].values
+            color = PALETTE.get(model_key, "#999999")
+            ax.plot(ns, stds, "o-", color=color, alpha=0.55, linewidth=1,
+                    label=f"{RAFT_TASK_DISPLAY.get(task, task)} / {MODEL_DISPLAY.get(model_key, model_key)}")
+
+    # Theoretical 1/√n reference
+    first_stds = [
+        summary[(summary["task"] == t) & (summary["n"] == RAFT_SAMPLE_SIZES[0])]["accuracy_std"].mean()
+        for t in RAFT_TASKS if t in found
+    ]
+    ref_scale = np.nanmedian(first_stds) * np.sqrt(RAFT_SAMPLE_SIZES[0])
+    ref_ns = np.array(RAFT_SAMPLE_SIZES)
+    ax.plot(ref_ns, ref_scale / np.sqrt(ref_ns), "k--", alpha=0.5, linewidth=2, label="~1/√n reference")
+
+    ax.set_xlabel("Sample Size (n)")
+    ax.set_ylabel("Std-Dev of Bootstrap Accuracy")
+    ax.set_xticks(RAFT_SAMPLE_SIZES)
+    ax.legend(fontsize=6, ncol=3, loc="upper right")
+    plt.tight_layout()
+    fig.savefig(OUTPUT_DIR / "raft_stddev_decay.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved → {OUTPUT_DIR / 'raft_stddev_decay.png'}")
+
+    # ── 5. Mean accuracy across subtasks vs. sample size ──────────────────
+    fig, ax = plt.subplots(figsize=(10, 5))
+    fig.suptitle("RAFT: Mean Accuracy Across All 10 Subtasks vs. Sample Size",
+                 fontsize=13, fontweight="bold")
+
+    for model_key in MODEL_DISPLAY:
+        sub = summary[(summary["model"] == model_key) & (summary["n"] != "full")]
+        if sub.empty:
+            continue
+        agg = sub.groupby("n")["accuracy"].mean().reset_index()
+        full_mean = summary[(summary["model"] == model_key) & (summary["n"] == "full")]["accuracy"].mean()
+        ns = agg["n"].astype(int).values
+        color = PALETTE.get(model_key, "#999999")
+        ax.plot(ns, agg["accuracy"].values, "o-", label=MODEL_DISPLAY[model_key],
+                color=color, linewidth=2)
+        ax.axhline(full_mean, color=color, linestyle="--", alpha=0.5, linewidth=1)
+
+    ax.set_xlabel("Sample Size (n)")
+    ax.set_ylabel("Mean Accuracy (10 subtasks)")
+    ax.set_xticks(RAFT_SAMPLE_SIZES)
+    ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0))
+    ax.legend(fontsize=10)
+    plt.tight_layout()
+    fig.savefig(OUTPUT_DIR / "raft_mean_convergence.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved → {OUTPUT_DIR / 'raft_mean_convergence.png'}")
+
+    print("\n✓ RAFT analysis complete.")
+    return summary
+
+
 if __name__ == "__main__":
     summary, data, boot_cache = run_analysis()
+    run_raft_analysis()

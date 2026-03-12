@@ -1,0 +1,402 @@
+[
+  {
+    "id": 0,
+    "ground_truth": 23,
+    "prediction": 22,
+    "raw_response": "change pin",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 1,
+    "ground_truth": 27,
+    "prediction": 15,
+    "raw_response": "card not working",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 2,
+    "ground_truth": 60,
+    "prediction": 60,
+    "raw_response": "top up failed",
+    "is_correct": true,
+    "is_unknown": false
+  },
+  {
+    "id": 3,
+    "ground_truth": 17,
+    "prediction": 16,
+    "raw_response": "card payment fee charged",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 4,
+    "ground_truth": 7,
+    "prediction": 68,
+    "raw_response": "transfer timing",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 5,
+    "ground_truth": 29,
+    "prediction": 17,
+    "raw_response": "card payment not recognised",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 6,
+    "ground_truth": 36,
+    "prediction": 64,
+    "raw_response": "transaction charged twice",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 7,
+    "ground_truth": 54,
+    "prediction": 17,
+    "raw_response": "card payment not recognised",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 8,
+    "ground_truth": 9,
+    "prediction": 67,
+    "raw_response": "transfer not received by recipient",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 9,
+    "ground_truth": 19,
+    "prediction": 77,
+    "raw_response": "wrong exchange rate for cash withdrawal",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 10,
+    "ground_truth": 7,
+    "prediction": null,
+    "raw_response": "balance not updated after transfer",
+    "is_correct": false,
+    "is_unknown": true
+  },
+  {
+    "id": 11,
+    "ground_truth": 58,
+    "prediction": null,
+    "raw_response": "top up fee charged",
+    "is_correct": false,
+    "is_unknown": true
+  },
+  {
+    "id": 12,
+    "ground_truth": 61,
+    "prediction": 61,
+    "raw_response": "top up limits",
+    "is_correct": true,
+    "is_unknown": false
+  },
+  {
+    "id": 13,
+    "ground_truth": 27,
+    "prediction": 17,
+    "raw_response": "card payment not recognised",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 14,
+    "ground_truth": 26,
+    "prediction": 25,
+    "raw_response": "country support",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 15,
+    "ground_truth": 60,
+    "prediction": 60,
+    "raw_response": "top up failed",
+    "is_correct": true,
+    "is_unknown": false
+  },
+  {
+    "id": 16,
+    "ground_truth": 36,
+    "prediction": 64,
+    "raw_response": "transaction charged twice",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 17,
+    "ground_truth": 8,
+    "prediction": 67,
+    "raw_response": "transfer not received by recipient",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 18,
+    "ground_truth": 70,
+    "prediction": 70,
+    "raw_response": "verify my identity",
+    "is_correct": true,
+    "is_unknown": false
+  },
+  {
+    "id": 19,
+    "ground_truth": 14,
+    "prediction": 39,
+    "raw_response": "get physical card",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 20,
+    "ground_truth": 6,
+    "prediction": 61,
+    "raw_response": "top up limits",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 21,
+    "ground_truth": 6,
+    "prediction": 5,
+    "raw_response": "automatic top up",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 22,
+    "ground_truth": 41,
+    "prediction": null,
+    "raw_response": "get spare card",
+    "is_correct": false,
+    "is_unknown": true
+  },
+  {
+    "id": 23,
+    "ground_truth": 75,
+    "prediction": 75,
+    "raw_response": "why verify identity",
+    "is_correct": true,
+    "is_unknown": false
+  },
+  {
+    "id": 24,
+    "ground_truth": 55,
+    "prediction": 55,
+    "raw_response": "supported cards and currencies",
+    "is_correct": true,
+    "is_unknown": false
+  },
+  {
+    "id": 25,
+    "ground_truth": 77,
+    "prediction": 77,
+    "raw_response": "wrong exchange rate for cash withdrawal",
+    "is_correct": true,
+    "is_unknown": false
+  },
+  {
+    "id": 26,
+    "ground_truth": 49,
+    "prediction": 48,
+    "raw_response": "pending top up",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 27,
+    "ground_truth": 21,
+    "prediction": 20,
+    "raw_response": "cash withdrawal charge",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 28,
+    "ground_truth": 77,
+    "prediction": 77,
+    "raw_response": "wrong exchange rate for cash withdrawal",
+    "is_correct": true,
+    "is_unknown": false
+  },
+  {
+    "id": 29,
+    "ground_truth": 50,
+    "prediction": 49,
+    "raw_response": "pending transfer",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 30,
+    "ground_truth": 34,
+    "prediction": 33,
+    "raw_response": "exchange rate",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 31,
+    "ground_truth": 17,
+    "prediction": 16,
+    "raw_response": "card payment fee charged",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 32,
+    "ground_truth": 60,
+    "prediction": 17,
+    "raw_response": "card payment not recognised",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 33,
+    "ground_truth": 29,
+    "prediction": 28,
+    "raw_response": "declined transfer",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 34,
+    "ground_truth": 14,
+    "prediction": 13,
+    "raw_response": "card delivery estimate",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 35,
+    "ground_truth": 50,
+    "prediction": 66,
+    "raw_response": "transfer into account",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 36,
+    "ground_truth": 31,
+    "prediction": 38,
+    "raw_response": "get disposable virtual card",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 37,
+    "ground_truth": 15,
+    "prediction": 14,
+    "raw_response": "card linking",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 38,
+    "ground_truth": 47,
+    "prediction": 46,
+    "raw_response": "pending card payment",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 39,
+    "ground_truth": 22,
+    "prediction": 76,
+    "raw_response": "wrong amount of cash received",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 40,
+    "ground_truth": 53,
+    "prediction": 52,
+    "raw_response": "refund not showing up",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 41,
+    "ground_truth": 13,
+    "prediction": 12,
+    "raw_response": "card arrival",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 42,
+    "ground_truth": 40,
+    "prediction": 22,
+    "raw_response": "change pin",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 43,
+    "ground_truth": 26,
+    "prediction": 25,
+    "raw_response": "country support",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 44,
+    "ground_truth": 74,
+    "prediction": 74,
+    "raw_response": "visa or mastercard",
+    "is_correct": true,
+    "is_unknown": false
+  },
+  {
+    "id": 45,
+    "ground_truth": 13,
+    "prediction": 13,
+    "raw_response": "card delivery estimate",
+    "is_correct": true,
+    "is_unknown": false
+  },
+  {
+    "id": 46,
+    "ground_truth": 30,
+    "prediction": 29,
+    "raw_response": "direct debit payment not recognised",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 47,
+    "ground_truth": 32,
+    "prediction": 31,
+    "raw_response": "edit personal details",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 48,
+    "ground_truth": 71,
+    "prediction": 51,
+    "raw_response": "receiving money",
+    "is_correct": false,
+    "is_unknown": false
+  },
+  {
+    "id": 49,
+    "ground_truth": 76,
+    "prediction": 76,
+    "raw_response": "wrong amount of cash received",
+    "is_correct": true,
+    "is_unknown": false
+  }
+]
