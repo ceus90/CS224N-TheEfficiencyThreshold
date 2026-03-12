@@ -1,0 +1,15 @@
+{
+  "method": "0_shot_vllm_thinking=False",
+  "model": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "dataset": "allenai/IFBench_test",
+  "eval_size": 300,
+  "total_constraints": 344,
+  "unique_constraint_types": 58,
+  "strict_prompt_accuracy": 0.2133,
+  "strict_instruction_accuracy": 0.2326,
+  "loose_prompt_accuracy": 0.2867,
+  "loose_instruction_accuracy": 0.3198,
+  "total_new_tokens": 126624,
+  "gen_tokens_per_sec": 523.74,
+  "total_gen_time_min": 4.029
+}

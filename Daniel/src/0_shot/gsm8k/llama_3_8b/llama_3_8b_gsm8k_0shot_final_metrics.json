@@ -1,0 +1,12 @@
+{
+  "method": "0_shot_vllm",
+  "model": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "dataset": "gsm8k/main:test",
+  "eval_size": 1319,
+  "accuracy": 0.7725549658832449,
+  "accuracy_known_only": 0.7725549658832449,
+  "unknown_frac": 0.0,
+  "total_new_tokens": 113419,
+  "gen_tokens_per_sec": 1056.1903971860793,
+  "total_gen_time_min": 1.7897499084472657
+}
