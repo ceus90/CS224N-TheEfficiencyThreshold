@@ -24,7 +24,6 @@ An investigation into the "Context-Weight Tradeoff" was conducted to evaluate th
 The project work is segregated into individual main folders. The contributions and modules managed within each directory are detailed below:
 
 ### `Shreyas`
-The following components and implementations were managed within this directory:
 * A critical cloud-based pipeline was engineered to evaluate context-weight tradeoffs across advanced LLM paradigms, including LORA, ReFT via pyreft, GEPA, Zero-Shot and Few-Shots.
 * Robust data preprocessing and stratified sampling were implemented for six diverse datasets.
 * Crucial LORA training for five causal models was orchestrated.
@@ -32,10 +31,8 @@ The following components and implementations were managed within this directory:
 * Automated scaling plots and comprehensive documentation were generated to ensure overall project success.
 
 ### `Abi`
-The following components and implementations were managed within this directory:
 * The experimental infrastructure used to run and evaluate the ICL and LoRA experiments across six models, five datasets, and multiple dataset splits was designed and implemented.
 * Experimental work included data preprocessing, prompt construction, model evaluation, and instrumentation for measuring latency, throughput, and VRAM used in the reported results.
 
 ### `Daniel`
-The following components and implementations were managed within this directory:
 * Zero-Shot baselines were evaluated across all datasets for all models.
