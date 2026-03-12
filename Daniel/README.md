@@ -49,7 +49,7 @@ CS224N-TheEfficiencyThreshold/
   README.md
   src/
     0_shot/         # 0-shot eval notebooks + metrics/checkpoints produced by those runs
-    peft/           # parameter-efficient finetuning notebooks (LoRA, P-Tuning v2)
+    peft/           # parameter-efficient finetuning notebooks (LoRA)
     analysis/       # aggregation + plotting (paper figures live here)
 ```
 
@@ -81,9 +81,8 @@ Notebook naming convention is generally:
 PEFT experiments are split by method:
 
 - `src/peft/lora/`
-- `src/peft/ptuningv2/`
 
-Each subfolder contains notebooks for specific tasks/models (e.g., IFBench LoRA, FinPhraseBank P-Tuning v2).
+Each subfolder contains notebooks for specific tasks/models (e.g., IFBench).
 
 ### `src/analysis/` — Aggregation + plotting (paper figures)
 
