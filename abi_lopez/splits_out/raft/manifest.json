@@ -1,0 +1,46 @@
+{
+  "created_at_utc": "2026-03-02T05:49:19Z",
+  "dataset": {
+    "name": "raft",
+    "adapter": "raft",
+    "source": {
+      "hf_id": "ought/raft",
+      "hf_config": "ade_corpus_v2",
+      "hf_split": "train",
+      "trust_remote_code": false
+    },
+    "settings": {
+      "label_key": "label",
+      "stratify": true,
+      "sampling_strategy": "default",
+      "group_key": "task_name"
+    }
+  },
+  "splits": {
+    "Ns_requested": [
+      16,
+      32,
+      64,
+      128,
+      256
+    ],
+    "Ns_used": [
+      16,
+      32
+    ],
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "nested": true
+  },
+  "stats": {
+    "num_examples_loaded": 50,
+    "label_counts": {
+      "not ADE-related": 35,
+      "ADE-related": 15
+    },
+    "group_stats": null
+  }
+}

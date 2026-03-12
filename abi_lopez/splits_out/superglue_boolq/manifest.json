@@ -1,0 +1,42 @@
+{
+  "created_at_utc": "2026-03-02T04:56:20Z",
+  "dataset": {
+    "name": "superglue_boolq",
+    "adapter": "superglue_boolq",
+    "source": {
+      "hf_id": "super_glue",
+      "hf_config": "boolq",
+      "hf_split": "train",
+      "trust_remote_code": false
+    },
+    "settings": {
+      "label_key": "label",
+      "stratify": true,
+      "sampling_strategy": "default",
+      "group_key": null
+    }
+  },
+  "splits": {
+    "Ns": [
+      16,
+      32,
+      64,
+      128,
+      256
+    ],
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "nested": true
+  },
+  "stats": {
+    "num_examples_loaded": 9427,
+    "label_counts": {
+      "True": 5874,
+      "False": 3553
+    },
+    "group_stats": null
+  }
+}

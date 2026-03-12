@@ -1,0 +1,40 @@
+{
+  "created_at_utc": "2026-02-13T06:42:04Z",
+  "dataset": {
+    "name": "superglue_rte",
+    "adapter": "superglue_rte",
+    "source": {
+      "hf_id": "super_glue",
+      "hf_config": "rte",
+      "hf_split": "train",
+      "trust_remote_code": false
+    },
+    "settings": {
+      "label_key": "label",
+      "stratify": true,
+      "sampling_strategy": "default"
+    }
+  },
+  "splits": {
+    "Ns": [
+      16,
+      32,
+      64,
+      128,
+      256
+    ],
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "nested": true
+  },
+  "stats": {
+    "num_examples_loaded": 2490,
+    "label_counts": {
+      "not_entailment": 1241,
+      "entailment": 1249
+    }
+  }
+}
