@@ -25,8 +25,6 @@ The project work is segregated into individual main folders. The contributions a
 
 ### `Shreyas`
 * A critical cloud-based pipeline was engineered to evaluate context-weight tradeoffs across advanced LLM paradigms, including LORA, ReFT via pyreft, GEPA, Zero-Shot and Few-Shots.
-* Robust data preprocessing and stratified sampling were implemented for six diverse datasets.
-* Crucial LORA training for five causal models was orchestrated.
 * An extensive inference loop was constructed to benchmark accuracy, latency, and VRAM metrics.
 * Automated scaling plots and comprehensive documentation were generated to ensure overall project success.
 
